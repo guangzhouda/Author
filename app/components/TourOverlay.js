@@ -102,8 +102,9 @@ export default function TourOverlay({ onOpenHelp }) {
 
     const skipToHelp = () => {
         setStatus('tour');
-        setCurrentStepIndex(TOUR_STEPS.length - 1);
-        updateRect(TOUR_STEPS.length - 1);
+        const helpStepIndex = TOUR_STEPS.length - 2;
+        setCurrentStepIndex(helpStepIndex);
+        updateRect(helpStepIndex);
     };
 
     const beginTour = useCallback(() => {
