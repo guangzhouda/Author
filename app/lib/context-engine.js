@@ -206,8 +206,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     // --- RAG 自动检索（仅当开启嵌入功能时） ---
     let autoRetrievedNodes = [];
     const queryText = (selectedText || '').trim();
-    const { apiConfig } = getProjectSettings();
-    if (apiConfig.useCustomEmbed && queryText && unselectedItemNodes.length > 0) {
+    if (settings.apiConfig?.useCustomEmbed && queryText && unselectedItemNodes.length > 0) {
         try {
             // 获取 Query 的 Embedding
             // 此处的文本可以是光标前的一小段文字，为了简便使用 selectedText
@@ -219,7 +218,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
                 ragSourceText = ragSourceText + '\n' + stripChapText;
             }
 
-            const queryVector = await getEmbedding(ragSourceText, apiConfig);
+            const queryVector = await getEmbedding(ragSourceText, settings.apiConfig);
             if (queryVector) {
                 // 计算相似度
                 const scoredNodes = unselectedItemNodes.map(n => {

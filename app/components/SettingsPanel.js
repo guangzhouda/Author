@@ -743,7 +743,7 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows, secr
                 <Component
                     className="modal-input"
                     style={{ marginBottom: 0, ...(multiline ? { resize: 'vertical', minHeight: `${(rows || 3) * 22}px` } : {}), ...(secret ? { paddingRight: 36 } : {}) }}
-                    type={secret && !showSecret ? 'password' : 'text'}
+                    {...(!multiline ? { type: secret && !showSecret ? 'password' : 'text' } : {})}
                     value={value || ''}
                     onChange={e => onChange(e.target.value)}
                     placeholder={placeholder}
