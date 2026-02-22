@@ -107,7 +107,7 @@ npm start
 
 ### Deploy to Zeabur
 
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/GITHUB/YuanShiJiLoong/author)
+> Recommended for users in mainland China. Go to [Zeabur Dashboard](https://dash.zeabur.com) → Create Project → Deploy from GitHub → Select `YuanShiJiLoong/author`.
 
 ---
 

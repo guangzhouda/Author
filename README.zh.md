@@ -107,7 +107,7 @@ npm start
 
 ### 部署到 Zeabur（推荐国内用户）
 
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/GITHUB/YuanShiJiLoong/author)
+> 前往 [Zeabur 控制台](https://dash.zeabur.com) → 新建项目 → 从 GitHub 部署 → 选择 `YuanShiJiLoong/author` 仓库即可。
 
 ---
 
