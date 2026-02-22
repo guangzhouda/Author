@@ -240,20 +240,22 @@ export default function AiSidebar({ onInsertText }) {
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
+        console.log('[Regenerate] Starting for msg:', aiMsgId);
 
         const msgs = chatHistory;
         const aiIdx = msgs.findIndex(m => m.id === aiMsgId);
-        if (aiIdx < 0) return;
+        if (aiIdx < 0) { console.log('[Regenerate] AI msg not found'); return; }
 
         let userMsgIdx = -1;
         for (let i = aiIdx - 1; i >= 0; i--) {
             if (msgs[i].role === 'user') { userMsgIdx = i; break; }
         }
-        if (userMsgIdx < 0) return;
+        if (userMsgIdx < 0) { console.log('[Regenerate] User msg not found'); return; }
 
         const userMsg = msgs[userMsgIdx];
         const priorHistory = msgs.slice(0, userMsgIdx);
         setChatStreaming(true);
+        console.log('[Regenerate] User msg:', userMsg.content.slice(0, 50));
 
         try {
             const { apiConfig } = getProjectSettings();
@@ -273,6 +275,7 @@ export default function AiSidebar({ onInsertText }) {
                         ...s, messages: s.messages.map(m => {
                             if (m.id !== aiMsgId) return m;
                             const variants = m.variants || [{ content: m.content, thinking: m.thinking || '', timestamp: m.timestamp }];
+                            console.log('[Regenerate] Initialized variants:', variants.length);
                             return { ...m, variants, content: '', thinking: '' };
                         }),
                     };
@@ -289,8 +292,10 @@ export default function AiSidebar({ onInsertText }) {
                     }));
                 },
                 (finalText, finalThinking) => {
+                    console.log('[Regenerate] Stream done, adding variant. Final text length:', finalText?.length);
                     setSessionStore(prev => {
                         const newStore = addVariant(prev, aiMsgId, { content: finalText || '（AI 未返回内容）', thinking: finalThinking, timestamp: Date.now() });
+                        console.log('[Regenerate] After addVariant, checking msg:', newStore.sessions.find(s => s.id === newStore.activeSessionId)?.messages.find(m => m.id === aiMsgId)?.variants?.length, 'variants');
                         saveSessionStore(newStore);
                         return newStore;
                     });
