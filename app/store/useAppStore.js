@@ -24,6 +24,9 @@ export const useAppStore = create((set, get) => ({
     showSettings: false,
     setShowSettings: (show) => set({ showSettings: show }),
 
+    jumpToNodeId: null,
+    setJumpToNodeId: (id) => set({ jumpToNodeId: id }),
+
     showSnapshots: false,
     setShowSnapshots: (show) => set({ showSnapshots: show }),
 

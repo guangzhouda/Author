@@ -17,6 +17,7 @@ import { MathInline, MathBlock, openMathEditor } from './MathExtension';
 import { PageBreakExtension } from './PageBreakExtension';
 import GhostMark from './GhostMark';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
+import { useAppStore } from '../store/useAppStore';
 
 // ==================== AI 模式配置 ====================
 const AI_MODES = [
@@ -282,6 +283,7 @@ export default Editor;
 
 // ==================== Inline AI 组件 ====================
 function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }) {
+    const { setShowSettings, setJumpToNodeId } = useAppStore();
     const [visible, setVisible] = useState(false);
     const [mode, setMode] = useState('continue');
     const [instruction, setInstruction] = useState('');
@@ -689,6 +691,10 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 contextItems={contextItems}
                 contextSelection={contextSelection}
                 setContextSelection={setContextSelection}
+                onJumpToNode={(nodeId) => {
+                    setJumpToNodeId(nodeId);
+                    setShowSettings(true);
+                }}
             />
 
             {/* 指令输入 */}
@@ -738,15 +744,15 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
     );
 }
 // ==================== Inline 参考面板（设定集勾选） ====================
-function InlineContextPanel({ contextItems, contextSelection, setContextSelection }) {
+function InlineContextPanel({ contextItems, contextSelection, setContextSelection, onJumpToNode }) {
     const [expanded, setExpanded] = useState(false);
 
-    // 只显示设定集条目，不显示对话历史
+    // 只显示设定集条目，不显示对话历史和空条目
     const settingsItems = useMemo(() =>
         (contextItems || []).filter(it => !it._empty && it.category !== 'dialogue'),
         [contextItems]);
 
-    // 按分组归类
+    // 按分组归类，过滤掉空分组
     const grouped = useMemo(() => {
         const groups = {};
         for (const item of settingsItems) {
@@ -797,6 +803,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
             {expanded && (
                 <div className="inline-context-list">
                     {Object.entries(grouped).map(([groupName, items]) => {
+                        if (items.length === 0) return null;
                         const checkedCount = items.filter(it => contextSelection?.has(it.id)).length;
                         const allChecked = checkedCount === items.length;
                         return (
@@ -812,14 +819,27 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                                     <span className="inline-context-group-count">{checkedCount}/{items.length}</span>
                                 </label>
                                 {items.map(item => (
-                                    <label key={item.id} className="inline-context-item">
-                                        <input
-                                            type="checkbox"
-                                            checked={contextSelection?.has(item.id) || false}
-                                            onChange={() => toggleItem(item.id)}
-                                        />
-                                        <span className="inline-context-item-name" title={item.name}>{item.name}</span>
-                                    </label>
+                                    <div key={item.id} className="inline-context-item" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={contextSelection?.has(item.id) || false}
+                                                onChange={() => toggleItem(item.id)}
+                                            />
+                                            <span className="inline-context-item-name" title={item.name}>{item.name}</span>
+                                        </label>
+                                        {item._nodeId && onJumpToNode && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onJumpToNode(item._nodeId); }}
+                                                style={{
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    fontSize: 11, color: 'var(--accent)', padding: '0 4px',
+                                                    opacity: 0.7, lineHeight: 1, flexShrink: 0,
+                                                }}
+                                                title="跳转到设定集"
+                                            >→</button>
+                                        )}
+                                    </div>
                                 ))}
                             </div>
                         );

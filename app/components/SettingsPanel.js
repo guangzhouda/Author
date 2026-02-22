@@ -37,7 +37,9 @@ export default function SettingsPanel() {
         showSettings: open,
         setShowSettings,
         setWritingMode: setGlobalWritingMode,
-        incrementSettingsVersion
+        incrementSettingsVersion,
+        jumpToNodeId,
+        setJumpToNodeId,
     } = useAppStore();
 
     const onClose = () => {
@@ -76,6 +78,13 @@ export default function SettingsPanel() {
                     if (wid) setActiveWorkId(wid);
                 }
                 setActiveWorkIdState(wid);
+
+                // 跳转到指定节点
+                if (jumpToNodeId) {
+                    setActiveTab('settings');
+                    setSelectedNodeId(jumpToNodeId);
+                    setJumpToNodeId(null);
+                }
             };
             loadNodes();
         }
