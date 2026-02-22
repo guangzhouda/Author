@@ -584,7 +584,7 @@ function ApiConfigForm({ data, onChange }) {
                 )}
             </div>
 
-            <FieldInput label="API Key" value={data.apiKey} onChange={v => update('apiKey', v)} placeholder={t('apiConfig.apiKeyPlaceholder')} />
+            <FieldInput label="API Key" value={data.apiKey} onChange={v => update('apiKey', v)} placeholder={t('apiConfig.apiKeyPlaceholder')} secret />
             {data.apiKey && <div style={{ fontSize: 11, color: 'var(--success)', marginTop: -10, marginBottom: 10 }}>{t('apiConfig.apiKeyConfigured')}</div>}
 
             <FieldInput label={isCustom ? t('apiConfig.apiAddress') : t('apiConfig.apiAddressAuto')} value={data.baseUrl} onChange={v => update('baseUrl', v)} placeholder={t('apiConfig.apiAddressPlaceholder')} />
@@ -657,7 +657,7 @@ function ApiConfigForm({ data, onChange }) {
                             ))}
                         </div>
                     </div>
-                    <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={t('apiConfig.embedApiKeyPlaceholder')} />
+                    <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={t('apiConfig.embedApiKeyPlaceholder')} secret />
                     <FieldInput label={data.embedProvider === 'custom' ? t('apiConfig.embedApiAddress') : t('apiConfig.embedApiAddressAuto')} value={data.embedBaseUrl} onChange={v => update('embedBaseUrl', v)} placeholder="https://api.example.com/v1" />
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
@@ -724,12 +724,38 @@ function ApiConfigForm({ data, onChange }) {
 
 // ==================== 表单组件 ====================
 
-function FieldInput({ label, value, onChange, placeholder, multiline, rows }) {
+function FieldInput({ label, value, onChange, placeholder, multiline, rows, secret }) {
+    const [showSecret, setShowSecret] = useState(false);
     const Component = multiline ? 'textarea' : 'input';
     return (
         <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{label}</label>
-            <Component className="modal-input" style={{ marginBottom: 0, ...(multiline ? { resize: 'vertical', minHeight: `${(rows || 3) * 22}px` } : {}) }} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows || 3} />
+            <div style={{ position: 'relative' }}>
+                <Component
+                    className="modal-input"
+                    style={{ marginBottom: 0, ...(multiline ? { resize: 'vertical', minHeight: `${(rows || 3) * 22}px` } : {}), ...(secret ? { paddingRight: 36 } : {}) }}
+                    type={secret && !showSecret ? 'password' : 'text'}
+                    value={value || ''}
+                    onChange={e => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    rows={rows || 3}
+                />
+                {secret && value && (
+                    <button
+                        type="button"
+                        onClick={() => setShowSecret(!showSecret)}
+                        style={{
+                            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px',
+                            opacity: 0.7, lineHeight: 1,
+                        }}
+                        title={showSecret ? '隐藏' : '显示'}
+                    >
+                        {showSecret ? '🙈' : '👁'}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
