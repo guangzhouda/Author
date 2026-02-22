@@ -324,12 +324,13 @@ export default function Home() {
               el.style.right = `${r}px`;
               el.style.bottom = `${b}px`;
             };
-            const onUp = (ev) => {
+            const onUp = () => {
               document.removeEventListener('pointermove', onMove);
               document.removeEventListener('pointerup', onUp);
               if (dragging) {
-                ev.preventDefault();
+                el.dataset.justDragged = '1';
                 localStorage.setItem(storageKey, JSON.stringify({ right: parseInt(el.style.right), bottom: parseInt(el.style.bottom) }));
+                setTimeout(() => delete el.dataset.justDragged, 0);
               }
             };
             document.addEventListener('pointermove', onMove);
@@ -359,9 +360,11 @@ export default function Home() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-secondary btn-icon"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
                 style={{ ...commonStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'inherit' }}
                 onPointerDown={makeDraggable}
-                onClick={(e) => { if (e.defaultPrevented) return; }}
+                onClick={(e) => { if (e.currentTarget.dataset.justDragged) e.preventDefault(); }}
                 onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
                 onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
                 title="GitHub"
@@ -379,7 +382,7 @@ export default function Home() {
               className="btn btn-secondary btn-icon"
               style={commonStyle}
               onPointerDown={makeDraggable}
-              onClick={(e) => { if (!e.defaultPrevented) setShowHelp(true); }}
+              onClick={(e) => { if (!e.currentTarget.dataset.justDragged) setShowHelp(true); }}
               onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
               onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
               title={t('page.helpAndGuide')}
