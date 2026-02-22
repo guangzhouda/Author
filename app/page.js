@@ -295,64 +295,108 @@ export default function Home() {
           </button>
         )}
 
-        {/* GitHub 链接 */}
-        <a
-          id="tour-github"
-          href="https://github.com/YuanShiJiLoong/author"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-secondary btn-icon"
-          style={{
-            position: 'absolute',
-            bottom: '76px',
-            right: '24px',
-            zIndex: 40,
-            borderRadius: '50%',
-            width: '44px',
-            height: '44px',
-            boxShadow: 'var(--shadow-md)',
-            fontSize: '18px',
-            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-            opacity: 0.8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textDecoration: 'none',
-            color: 'inherit',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-          title="GitHub"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-        </a>
-
-        {/* 帮助与向导按钮 */}
-        <button
-          id="tour-help"
-          className="btn btn-secondary btn-icon"
-          style={{
-            position: 'absolute',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 40,
-            borderRadius: '50%',
-            width: '44px',
-            height: '44px',
-            boxShadow: 'var(--shadow-md)',
-            fontSize: '18px',
-            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-            opacity: 0.8
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-          onClick={() => setShowHelp(true)}
-          title={t('page.helpAndGuide')}
-        >
-          📖
-        </button>
+        {/* 可拖动浮动按钮组 */}
+        {(() => {
+          const STORAGE_KEY = 'author-fab-pos';
+          const saved = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') : null;
+          const defaultPos = { right: 24, bottom: 24 };
+          return (
+            <div
+              id="tour-fab-group"
+              style={{
+                position: 'absolute',
+                right: `${saved?.right ?? defaultPos.right}px`,
+                bottom: `${saved?.bottom ?? defaultPos.bottom}px`,
+                zIndex: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                cursor: 'grab',
+                userSelect: 'none',
+              }}
+              onPointerDown={(e) => {
+                if (e.target.closest('a') || (e.target.tagName === 'BUTTON' && !e.target.classList.contains('fab-drag-handle'))) return;
+                const el = e.currentTarget;
+                const rect = el.getBoundingClientRect();
+                const parentRect = el.parentElement.getBoundingClientRect();
+                const offsetX = e.clientX - rect.left;
+                const offsetY = e.clientY - rect.top;
+                el.style.cursor = 'grabbing';
+                let moved = false;
+                const onMove = (ev) => {
+                  moved = true;
+                  const newRight = parentRect.right - ev.clientX - (rect.width - offsetX);
+                  const newBottom = parentRect.bottom - ev.clientY - (rect.height - offsetY);
+                  const clampedRight = Math.max(0, Math.min(parentRect.width - rect.width, newRight));
+                  const clampedBottom = Math.max(0, Math.min(parentRect.height - rect.height, newBottom));
+                  el.style.right = `${clampedRight}px`;
+                  el.style.bottom = `${clampedBottom}px`;
+                };
+                const onUp = () => {
+                  el.style.cursor = 'grab';
+                  document.removeEventListener('pointermove', onMove);
+                  document.removeEventListener('pointerup', onUp);
+                  if (moved) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                      right: parseInt(el.style.right),
+                      bottom: parseInt(el.style.bottom),
+                    }));
+                  }
+                };
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+              }}
+            >
+              <a
+                id="tour-github"
+                href="https://github.com/YuanShiJiLoong/author"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-icon"
+                style={{
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  boxShadow: 'var(--shadow-md)',
+                  fontSize: '18px',
+                  transition: 'opacity 0.15s',
+                  opacity: 0.8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                title="GitHub"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+              </a>
+              <button
+                id="tour-help"
+                className="btn btn-secondary btn-icon"
+                style={{
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  boxShadow: 'var(--shadow-md)',
+                  fontSize: '18px',
+                  transition: 'opacity 0.15s',
+                  opacity: 0.8
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                onClick={() => setShowHelp(true)}
+                title={t('page.helpAndGuide')}
+              >
+                📖
+              </button>
+            </div>
+          );
+        })()}
       </main>
 
       {/* ===== AI 对话侧栏 ===== */}
