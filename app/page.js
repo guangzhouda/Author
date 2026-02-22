@@ -108,19 +108,12 @@ export default function Home() {
       const allItems = [...baseItems, ...chatItems];
       setContextItems(allItems);
 
-      // 默认全选启用的条目（仅首次）
+      // 仅首次使用（localStorage无记录）时默认全选启用条目，之后记住用户的勾选
       setContextSelection(prev => {
-        if (prev.size === 0) {
+        if (prev.size === 0 && !localStorage.getItem('author-context-selection')) {
           return new Set(allItems.filter(it => it.enabled).map(it => it.id));
         }
-        // 自动加入新出现的条目
-        const next = new Set(prev);
-        for (const item of allItems) {
-          if (item.enabled && !prev.has(item.id)) {
-            next.add(item.id);
-          }
-        }
-        return next;
+        return prev;
       });
     };
 
