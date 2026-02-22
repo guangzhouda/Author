@@ -747,9 +747,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
 function InlineContextPanel({ contextItems, contextSelection, setContextSelection, onJumpToNode }) {
     const [expanded, setExpanded] = useState(false);
 
-    // 只显示设定集条目，不显示对话历史和空条目
+    // 只显示设定集条目，不显示对话历史
     const settingsItems = useMemo(() =>
-        (contextItems || []).filter(it => !it._empty && it.category !== 'dialogue'),
+        (contextItems || []).filter(it => it.category !== 'dialogue'),
         [contextItems]);
 
     // 按分组归类，过滤掉空分组
@@ -803,7 +803,6 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
             {expanded && (
                 <div className="inline-context-list">
                     {Object.entries(grouped).map(([groupName, items]) => {
-                        if (items.length === 0) return null;
                         const checkedCount = items.filter(it => contextSelection?.has(it.id)).length;
                         const allChecked = checkedCount === items.length;
                         return (
