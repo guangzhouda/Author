@@ -565,6 +565,35 @@ export async function moveSettingsNode(id, newParentId) {
     return nodes[idx];
 }
 
+// 重新计算所有条目的 embedding (Async)
+export async function rebuildAllEmbeddings(onProgress) {
+    const nodes = await getSettingsNodes();
+    const { apiConfig } = getProjectSettings();
+    const items = nodes.filter(n => n.type === 'item');
+    let done = 0;
+    let failed = 0;
+
+    for (const item of items) {
+        try {
+            const textToEmbed = extractTextForEmbedding(item);
+            const embedding = await getEmbedding(textToEmbed, apiConfig);
+            const idx = nodes.findIndex(n => n.id === item.id);
+            if (idx !== -1 && embedding) {
+                nodes[idx].embedding = embedding;
+            } else if (!embedding) {
+                failed++;
+            }
+        } catch {
+            failed++;
+        }
+        done++;
+        onProgress?.(done, items.length, failed);
+    }
+
+    await saveSettingsNodes(nodes);
+    return { total: items.length, done, failed };
+}
+
 // 获取指定分类下的所有 item 节点（递归） (Async)
 export async function getItemsByCategory(category) {
     const nodes = await getSettingsNodes();

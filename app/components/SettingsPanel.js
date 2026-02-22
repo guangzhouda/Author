@@ -17,6 +17,7 @@ import {
     getActiveWorkId,
     setActiveWorkId,
     getAllWorks,
+    rebuildAllEmbeddings,
 } from '../lib/settings';
 import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
@@ -486,6 +487,7 @@ function ApiConfigForm({ data, onChange }) {
     const [testStatus, setTestStatus] = useState(null);
     const [fetchedModels, setFetchedModels] = useState(null);
     const [fetchedEmbedModels, setFetchedEmbedModels] = useState(null);
+    const [rebuildStatus, setRebuildStatus] = useState(null); // null | 'loading' | {done, total, failed}
     const [savedProfiles, setSavedProfiles] = useState([]);
     const [profileName, setProfileName] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
@@ -555,6 +557,20 @@ function ApiConfigForm({ data, onChange }) {
             if (result.error) { setFetchedEmbedModels(null); setTestStatus({ success: false, error: t('apiConfig.embedApiPrefix') + result.error }); }
             else { setFetchedEmbedModels(result.models || []); }
         } catch { setFetchedEmbedModels(null); setTestStatus({ success: false, error: t('apiConfig.fetchEmbedModelsFailed') }); }
+    };
+
+    const handleRebuildEmbeddings = async () => {
+        setRebuildStatus({ done: 0, total: 0, failed: 0 });
+        try {
+            const result = await rebuildAllEmbeddings((done, total, failed) => {
+                setRebuildStatus({ done, total, failed });
+            });
+            setRebuildStatus({ ...result, finished: true });
+            setTimeout(() => setRebuildStatus(null), 5000);
+        } catch {
+            setRebuildStatus({ error: true });
+            setTimeout(() => setRebuildStatus(null), 3000);
+        }
     };
 
     const currentProvider = PROVIDERS.find(p => p.key === data.provider) || PROVIDERS[7];
@@ -688,6 +704,28 @@ function ApiConfigForm({ data, onChange }) {
                                 </div>
                             </>
                         )}
+                    </div>
+
+                    {/* 重建向量按钮 */}
+                    <div style={{ marginTop: 8 }}>
+                        <button
+                            style={{ padding: '8px 16px', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: rebuildStatus && !rebuildStatus.finished ? 'wait' : 'pointer', fontSize: 12, color: 'var(--accent)', fontWeight: 500, opacity: rebuildStatus && !rebuildStatus.finished ? 0.7 : 1 }}
+                            onClick={handleRebuildEmbeddings}
+                            disabled={rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error}
+                        >
+                            {rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error
+                                ? `向量化中... ${rebuildStatus.done}/${rebuildStatus.total}`
+                                : '🔄 重建所有设定向量'}
+                        </button>
+                        {rebuildStatus?.finished && (
+                            <span style={{ marginLeft: 8, fontSize: 11, color: rebuildStatus.failed > 0 ? 'var(--warning)' : 'var(--success)' }}>
+                                ✓ 完成！{rebuildStatus.done - rebuildStatus.failed}/{rebuildStatus.total} 成功{rebuildStatus.failed > 0 ? `，${rebuildStatus.failed} 失败` : ''}
+                            </span>
+                        )}
+                        {rebuildStatus?.error && (
+                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error)' }}>重建失败</span>
+                        )}
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>首次开启或更换嵌入模型后，需要重建向量才能使用 RAG 智能检索</div>
                     </div>
                 </div>
             )}
