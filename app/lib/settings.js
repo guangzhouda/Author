@@ -490,9 +490,11 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
     };
 
     if (node.type === 'item') {
-        const textToEmbed = extractTextForEmbedding(node);
         const { apiConfig } = getProjectSettings();
-        node.embedding = await getEmbedding(textToEmbed, apiConfig);
+        if (apiConfig.useCustomEmbed) {
+            const textToEmbed = extractTextForEmbedding(node);
+            node.embedding = await getEmbedding(textToEmbed, apiConfig);
+        }
     }
 
     nodes.push(node);
@@ -514,12 +516,12 @@ export async function updateSettingsNode(id, updates) {
         delete updates.parentId;
     }
 
-    // 如果名称或内容发生改变，且是条目，重新计算 embedding
+    // 如果名称或内容发生改变，且是条目，且开启了嵌入功能，重新计算 embedding
     const nodeType = updates.type || nodes[idx].type;
-    if (nodeType === 'item' && (updates.name !== undefined || updates.content !== undefined)) {
+    const { apiConfig } = getProjectSettings();
+    if (nodeType === 'item' && apiConfig.useCustomEmbed && (updates.name !== undefined || updates.content !== undefined)) {
         const tempNode = { ...nodes[idx], ...updates };
         const textToEmbed = extractTextForEmbedding(tempNode);
-        const { apiConfig } = getProjectSettings();
         updates.embedding = await getEmbedding(textToEmbed, apiConfig);
     }
 

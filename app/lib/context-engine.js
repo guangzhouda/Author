@@ -203,14 +203,14 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
         }
     }
 
-    // --- RAG 自动检索 ---
+    // --- RAG 自动检索（仅当开启嵌入功能时） ---
     let autoRetrievedNodes = [];
     const queryText = (selectedText || '').trim();
-    if (queryText && unselectedItemNodes.length > 0) {
+    const { apiConfig } = getProjectSettings();
+    if (apiConfig.useCustomEmbed && queryText && unselectedItemNodes.length > 0) {
         try {
             // 获取 Query 的 Embedding
             // 此处的文本可以是光标前的一小段文字，为了简便使用 selectedText
-            const { apiConfig } = getProjectSettings();
             // TODO: 这里如果是空文本，可能需要补当前章节最近的内容
             let ragSourceText = queryText;
             if (ragSourceText.length < 50 && currentChapter) {

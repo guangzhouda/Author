@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // 通用模型列表拉取 — 支持 OpenAI 兼容格式和 Gemini 原生格式
 export async function POST(request) {
     try {
-        const { apiKey, baseUrl, provider } = await request.json();
+        const { apiKey, baseUrl, provider, embedOnly } = await request.json();
 
         if (!apiKey) {
             return NextResponse.json(
@@ -14,11 +14,11 @@ export async function POST(request) {
 
         // Gemini 原生格式
         if (provider === 'gemini-native') {
-            return await fetchGeminiModels(apiKey, baseUrl);
+            return await fetchGeminiModels(apiKey, baseUrl, embedOnly);
         }
 
         // OpenAI 兼容格式（适用于所有其他供应商）
-        return await fetchOpenAIModels(apiKey, baseUrl);
+        return await fetchOpenAIModels(apiKey, baseUrl, embedOnly);
 
     } catch (error) {
         console.error('拉取模型列表错误:', error);
@@ -30,7 +30,7 @@ export async function POST(request) {
 }
 
 // Gemini 原生格式拉取模型
-async function fetchGeminiModels(apiKey, baseUrl) {
+async function fetchGeminiModels(apiKey, baseUrl, embedOnly) {
     const base = (baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
     const url = `${base}/models?key=${apiKey}`;
 
@@ -44,19 +44,25 @@ async function fetchGeminiModels(apiKey, baseUrl) {
     }
 
     const data = await response.json();
-    const models = (data.models || [])
-        .filter(m => m.supportedGenerationMethods?.includes('generateContent') || m.supportedGenerationMethods?.includes('embedContent'))
-        .map(m => ({
-            id: m.name?.replace('models/', '') || m.name,
-            displayName: m.displayName || m.name,
-        }))
+    let models = (data.models || []);
+
+    if (embedOnly) {
+        models = models.filter(m => m.supportedGenerationMethods?.includes('embedContent'));
+    } else {
+        models = models.filter(m => m.supportedGenerationMethods?.includes('generateContent') || m.supportedGenerationMethods?.includes('embedContent'));
+    }
+
+    models = models.map(m => ({
+        id: m.name?.replace('models/', '') || m.name,
+        displayName: m.displayName || m.name,
+    }))
         .sort((a, b) => a.id.localeCompare(b.id));
 
     return NextResponse.json({ models });
 }
 
 // OpenAI 兼容格式拉取模型（/v1/models）
-async function fetchOpenAIModels(apiKey, baseUrl) {
+async function fetchOpenAIModels(apiKey, baseUrl, embedOnly) {
     const base = (baseUrl || '').replace(/\/$/, '');
     if (!base) {
         return NextResponse.json(
@@ -80,12 +86,16 @@ async function fetchOpenAIModels(apiKey, baseUrl) {
     }
 
     const data = await response.json();
-    // OpenAI 格式返回 { data: [{id, ...}, ...] }
-    const models = (data.data || [])
-        .map(m => ({
-            id: m.id,
-            displayName: m.id,
-        }))
+    let models = (data.data || []);
+
+    if (embedOnly) {
+        models = models.filter(m => /embed/i.test(m.id));
+    }
+
+    models = models.map(m => ({
+        id: m.id,
+        displayName: m.id,
+    }))
         .sort((a, b) => a.id.localeCompare(b.id));
 
     return NextResponse.json({ models });

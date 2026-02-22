@@ -550,7 +550,7 @@ function ApiConfigForm({ data, onChange }) {
         try {
             const embedKey = data.embedApiKey || data.apiKey;
             const embedBase = data.embedBaseUrl || data.baseUrl;
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider }) });
+            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true }) });
             const result = await res.json();
             if (result.error) { setFetchedEmbedModels(null); setTestStatus({ success: false, error: t('apiConfig.embedApiPrefix') + result.error }); }
             else { setFetchedEmbedModels(result.models || []); }
