@@ -56,13 +56,33 @@
       "output": "dist"
     },
     "files": [
-      ".next/**/*",
-      "node_modules/**/*",
-      "public/**/*",
       "electron/**/*",
-      "package.json",
-      "next.config.mjs"
+      "package.json"
     ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "standalone",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".next/static",
+        "to": "standalone/.next/static",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "public",
+        "to": "standalone/public",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "afterPack": "./afterPack.js",
     "win": {
       "target": [
         {

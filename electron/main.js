@@ -1,12 +1,32 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { fork } = require('child_process');
+const http = require('http');
+const fs = require('fs');
+
+// 日志文件 - 写到用户桌面方便查看
+const logFile = path.join(app.getPath('desktop'), 'author-debug.log');
+function log(msg) {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    console.log(msg);
+    try { fs.appendFileSync(logFile, line); } catch (e) { }
+}
+
+// 防止多开
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    log('Another instance is running, quitting.');
+    app.quit();
+    process.exit(0);
+}
 
 let mainWindow;
-let nextServer;
+let serverProcess;
 
 const isDev = process.argv.includes('--dev');
 const PORT = 3000;
+let loadRetries = 0;
+const MAX_LOAD_RETRIES = 10;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -15,13 +35,11 @@ function createWindow() {
         minWidth: 900,
         minHeight: 600,
         title: 'Author — AI-Powered Creative Writing',
-        icon: path.join(__dirname, '..', 'public', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
         },
-        // 隐藏默认菜单栏，更简洁
         autoHideMenuBar: true,
         show: false,
     });
@@ -30,11 +48,41 @@ function createWindow() {
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
+        // F12 打开开发者工具
+        mainWindow.webContents.on('before-input-event', (event, input) => {
+            if (input.key === 'F12') {
+                mainWindow.webContents.toggleDevTools();
+            }
+        });
     });
 
-    // 外部链接在系统浏览器中打开
+    // 加载失败时有限次重试
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+        loadRetries++;
+        log(`Load failed (${loadRetries}/${MAX_LOAD_RETRIES}): ${errorDescription}`);
+        if (loadRetries < MAX_LOAD_RETRIES) {
+            setTimeout(() => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.loadURL(`http://localhost:${PORT}`);
+                }
+            }, 2000);
+        } else {
+            mainWindow.show();
+            dialog.showErrorBox(
+                'Author 启动失败',
+                '无法连接到内置服务器。\n\n' +
+                '查看日志: ' + logFile
+            );
+        }
+    });
+
+    mainWindow.webContents.on('did-finish-load', () => {
+        log('Page loaded successfully');
+        loadRetries = 0;
+    });
+
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith('http')) {
+        if (url.startsWith('http') && !url.includes('localhost')) {
             shell.openExternal(url);
             return { action: 'deny' };
         }
@@ -46,94 +94,134 @@ function createWindow() {
     });
 }
 
+function waitForServer(port, maxRetries = 30) {
+    return new Promise((resolve) => {
+        let retries = 0;
+        const check = () => {
+            const req = http.get(`http://localhost:${port}`, (res) => {
+                resolve(true);
+            });
+            req.on('error', () => {
+                retries++;
+                if (retries >= maxRetries) {
+                    resolve(false);
+                } else {
+                    setTimeout(check, 1000);
+                }
+            });
+            req.setTimeout(2000, () => {
+                req.destroy();
+                retries++;
+                if (retries >= maxRetries) {
+                    resolve(false);
+                } else {
+                    setTimeout(check, 1000);
+                }
+            });
+        };
+        check();
+    });
+}
+
 function startNextServer() {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve) => {
         if (isDev) {
-            // 开发模式：假设 dev server 已在运行
-            console.log('[Author] Dev mode — connecting to existing dev server...');
-            resolve();
+            log('Dev mode — connecting to existing dev server...');
+            resolve(true);
             return;
         }
 
-        console.log('[Author] Starting production server...');
+        const isPackaged = app.isPackaged;
+        let standaloneDir;
 
-        // 生产模式：运行 next start
-        const nextBin = path.join(__dirname, '..', 'node_modules', '.bin', 'next');
-        const projectDir = path.join(__dirname, '..');
+        if (isPackaged) {
+            standaloneDir = path.join(process.resourcesPath, 'standalone');
+        } else {
+            standaloneDir = path.join(__dirname, '..', '.next', 'standalone');
+        }
 
-        nextServer = spawn(
-            process.platform === 'win32' ? `${nextBin}.cmd` : nextBin,
-            ['start', '-p', String(PORT)],
-            {
-                cwd: projectDir,
-                env: { ...process.env, NODE_ENV: 'production' },
-                stdio: 'pipe',
-                shell: true,
-            }
-        );
+        const serverPath = path.join(standaloneDir, 'server.js');
 
-        let started = false;
+        log(`isPackaged: ${isPackaged}`);
+        log(`resourcesPath: ${process.resourcesPath}`);
+        log(`standaloneDir: ${standaloneDir}`);
+        log(`serverPath: ${serverPath}`);
+        log(`serverExists: ${fs.existsSync(serverPath)}`);
 
-        nextServer.stdout.on('data', (data) => {
-            const output = data.toString();
-            console.log('[Next.js]', output);
-            if (!started && output.includes('Ready')) {
-                started = true;
-                resolve();
-            }
+        // 检查关键目录
+        const staticDir = path.join(standaloneDir, '.next', 'static');
+        const publicDir = path.join(standaloneDir, 'public');
+        log(`staticDir exists: ${fs.existsSync(staticDir)}`);
+        log(`publicDir exists: ${fs.existsSync(publicDir)}`);
+
+        if (!fs.existsSync(serverPath)) {
+            const msg = '找不到 server.js\n路径: ' + serverPath;
+            log('ERROR: ' + msg);
+            dialog.showErrorBox('Author 启动失败', msg);
+            resolve(false);
+            return;
+        }
+
+        log('Starting Next.js server via fork...');
+
+        serverProcess = fork(serverPath, [], {
+            cwd: standaloneDir,
+            env: {
+                ...process.env,
+                NODE_ENV: 'production',
+                PORT: String(PORT),
+                HOSTNAME: 'localhost',
+                ELECTRON_RUN_AS_NODE: '1',
+            },
+            stdio: 'pipe',
         });
 
-        nextServer.stderr.on('data', (data) => {
-            console.error('[Next.js Error]', data.toString());
+        serverProcess.stdout.on('data', (data) => {
+            log('[Next.js stdout] ' + data.toString().trim());
         });
 
-        nextServer.on('error', (err) => {
-            console.error('[Next.js] Failed to start:', err);
-            reject(err);
+        serverProcess.stderr.on('data', (data) => {
+            log('[Next.js stderr] ' + data.toString().trim());
         });
 
-        nextServer.on('close', (code) => {
-            if (!started) {
-                reject(new Error(`Next.js server exited with code ${code}`));
-            }
+        serverProcess.on('error', (err) => {
+            log('[Server process error] ' + err.message);
         });
 
-        // 超时保底 — 15秒内没有就绪也继续
-        setTimeout(() => {
-            if (!started) {
-                started = true;
-                console.log('[Author] Server startup timeout, loading anyway...');
-                resolve();
-            }
-        }, 15000);
+        serverProcess.on('close', (code) => {
+            log('[Server process closed] code: ' + code);
+        });
+
+        const ready = await waitForServer(PORT);
+        log(`Server ready: ${ready}`);
+        resolve(ready);
     });
 }
 
 app.whenReady().then(async () => {
-    try {
-        await startNextServer();
-    } catch (err) {
-        console.error('[Author] Server start failed:', err);
-    }
+    log('=== Author Desktop Starting ===');
+    log(`Electron version: ${process.versions.electron}`);
+    log(`Node version: ${process.versions.node}`);
+    log(`Platform: ${process.platform} ${process.arch}`);
+    log(`App path: ${app.getAppPath()}`);
+    log(`Exe path: ${process.execPath}`);
+
+    await startNextServer();
     createWindow();
 });
 
-app.on('window-all-closed', () => {
-    if (nextServer) {
-        nextServer.kill();
+app.on('second-instance', () => {
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
     }
+});
+
+app.on('window-all-closed', () => {
+    if (serverProcess) serverProcess.kill();
     app.quit();
 });
 
-app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
-});
-
-// 确保退出时清理子进程
 app.on('before-quit', () => {
-    if (nextServer) {
-        nextServer.kill();
-    }
+    if (serverProcess) serverProcess.kill();
 });
