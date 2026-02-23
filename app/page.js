@@ -30,6 +30,7 @@ const SnapshotManager = dynamic(() => import('./components/SnapshotManager'), { 
 const WelcomeModal = dynamic(() => import('./components/WelcomeModal'), { ssr: false });
 
 export default function Home() {
+  const [showGitMenu, setShowGitMenu] = useState(false);
   const {
     chapters, setChapters, addChapter, updateChapter: updateChapterStore,
     activeChapterId, setActiveChapterId,
@@ -352,27 +353,127 @@ export default function Home() {
             touchAction: 'none',
           };
           if (btnKey === 'github') {
+            const gitBtnRef = { current: null };
             return (
-              <a
+              <div
                 key="github"
-                id="tour-github"
-                href="https://github.com/YuanShiJiLoong/author"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary btn-icon"
-                draggable={false}
-                onDragStart={(e) => e.preventDefault()}
-                style={{ ...commonStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'inherit' }}
-                onPointerDown={makeDraggable}
-                onClick={(e) => { if (e.currentTarget.dataset.justDragged) e.preventDefault(); }}
+                style={{ ...commonStyle, touchAction: 'none' }}
+                onPointerDown={(e) => {
+                  // Use the same drag logic but on this outer container
+                  const el = e.currentTarget;
+                  const parentRect = el.parentElement.getBoundingClientRect();
+                  const rect = el.getBoundingClientRect();
+                  const startX = e.clientX, startY = e.clientY;
+                  const offsetX = e.clientX - rect.left;
+                  const offsetY = e.clientY - rect.top;
+                  let dragging = false;
+                  const onMove = (ev) => {
+                    if (!dragging && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < 5) return;
+                    dragging = true;
+                    ev.preventDefault();
+                    const r = Math.max(0, Math.min(parentRect.width - rect.width, parentRect.right - ev.clientX - (rect.width - offsetX)));
+                    const b = Math.max(0, Math.min(parentRect.height - rect.height, parentRect.bottom - ev.clientY - (rect.height - offsetY)));
+                    el.style.right = `${r}px`;
+                    el.style.bottom = `${b}px`;
+                  };
+                  const onUp = () => {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                    if (dragging) {
+                      el.dataset.justDragged = '1';
+                      localStorage.setItem(storageKey, JSON.stringify({ right: parseInt(el.style.right), bottom: parseInt(el.style.bottom) }));
+                      setTimeout(() => delete el.dataset.justDragged, 0);
+                    }
+                  };
+                  document.addEventListener('pointermove', onMove);
+                  document.addEventListener('pointerup', onUp);
+                }}
                 onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
                 onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-                title="GitHub"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-              </a>
+                {/* Dropdown popup */}
+                {showGitMenu && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', inset: 0, zIndex: 39 }}
+                      onClick={() => setShowGitMenu(false)}
+                    />
+                    <div
+                      className="git-menu-popup"
+                      style={{
+                        position: 'absolute',
+                        bottom: '52px',
+                        right: 0,
+                        background: 'var(--bg-card)',
+                        borderRadius: '12px',
+                        boxShadow: 'var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.18))',
+                        border: '1px solid var(--border-color)',
+                        padding: '6px',
+                        minWidth: '180px',
+                        zIndex: 41,
+                        animation: 'fadeInUp 0.18s ease',
+                      }}
+                    >
+                      <a
+                        href="https://github.com/YuanShiJiLoong/author"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="git-menu-item"
+                        onClick={() => setShowGitMenu(false)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          padding: '10px 14px', borderRadius: '8px',
+                          textDecoration: 'none', color: 'var(--text-primary)',
+                          fontSize: '14px', fontWeight: 500,
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.05))'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        GitHub
+                      </a>
+                      <a
+                        href="https://gitee.com/yuanshijilong/author"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="git-menu-item"
+                        onClick={() => setShowGitMenu(false)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          padding: '10px 14px', borderRadius: '8px',
+                          textDecoration: 'none', color: 'var(--text-primary)',
+                          fontSize: '14px', fontWeight: 500,
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.05))'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.48c0 .327.266.592.593.592h5.574c.327 0 .593-.265.593-.593v-1.482a.594.594 0 0 0-.593-.592h-3.408a.43.43 0 0 1-.43-.43v-1.455a.43.43 0 0 1 .43-.43h5.91c.329 0 .594.266.594.593v5.78a2.133 2.133 0 0 1-2.133 2.134H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.444-4.444h8.297z" />
+                        </svg>
+                        Gitee（国内镜像）
+                      </a>
+                    </div>
+                  </>
+                )}
+                {/* FAB button */}
+                <div
+                  id="tour-github"
+                  className="btn btn-secondary btn-icon"
+                  draggable={false}
+                  onDragStart={(e) => e.preventDefault()}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', cursor: 'grab', userSelect: 'none' }}
+                  onClick={(e) => { if (!e.currentTarget.parentElement.dataset.justDragged) setShowGitMenu(prev => !prev); }}
+                  title="GitHub / Gitee"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                </div>
+              </div>
             );
           }
           return (
