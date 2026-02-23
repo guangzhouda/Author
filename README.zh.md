@@ -71,10 +71,9 @@
 **无需安装 Node.js！** 直接下载安装包：
 
 - 📥 [下载 Author 安装包（Windows）](https://github.com/YuanShiJiLoong/author/releases/latest)
+- 💬 无法访问 GitHub？加入 **QQ 交流群：1087016949**，群文件中下载
 
 安装即用，所有功能开箱即得。
-
-> 💡 Gitee 镜像仅提供源码，安装包请从 GitHub Release 下载。
 
 > 💡 从源码构建桌面应用：`npm run build && npx electron-builder --win`
 
@@ -175,6 +174,13 @@ Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用
 - ✅ 你可以用于个人/商业用途
 - ⚠️ 修改后的版本也必须开源（包括网络服务）
 - ⚠️ 必须保留原始版权声明
+
+---
+
+## 💬 社区交流
+
+- QQ 交流群：**1087016949**（Author交流群）
+- [GitHub Issues](https://github.com/YuanShiJiLoong/author/issues) — 问题反馈与功能建议
 
 ---
 
