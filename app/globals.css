@@ -48,6 +48,10 @@
   --shadow-lg: 0 12px 32px rgba(44, 36, 23, 0.12);
   --shadow-page: 0 8px 30px rgba(44, 36, 23, 0.08), 0 1px 3px rgba(44, 36, 23, 0.04);
 
+  --success: #2ea043;
+  --error: #c46a6a;
+  --info: #3b82f6;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -85,6 +89,10 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-page: 0 8px 30px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  --success: #3fb950;
+  --error: #e07070;
+  --info: #60a5fa;
 }
 
 /* 现代极简透玻璃主题 (Modern Glass) */
@@ -117,6 +125,10 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
   --shadow-page: 0 10px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
+
+  --success: #16a34a;
+  --error: #dc2626;
+  --info: #2563eb;
 
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -154,6 +166,10 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.6);
   --shadow-page: 0 10px 40px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.5);
+
+  --success: #3fb950;
+  --error: #f87171;
+  --info: #93c5fd;
 }
 
 /* ==================== 基础样式 ==================== */

@@ -159,7 +159,13 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     // 通过 ref 暴露插入方法给父组件（侧栏存档插入用）
     useImperativeHandle(ref, () => ({
         insertText: (text) => {
-            editor?.chain().focus().insertContent(text).run();
+            if (!editor) return;
+            // 将纯文本按行拆分，每行包装为 <p>，保留空行和缩进
+            const lines = text.split('\n');
+            const html = lines
+                .map(line => `<p>${line || '<br>'}</p>`)
+                .join('');
+            editor.chain().focus().insertContent(html).run();
         },
     }), [editor]);
 
@@ -394,6 +400,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             if (char === '\n') {
                 if (typeQueueRef.current[0] !== '\n') {
                     // 换行：使用原生 split，不调用 scrollIntoView
+                    ghostTextRef.current += '\n';
                     const { state } = editor.view;
                     const tr = state.tr.split(state.selection.from);
                     editor.view.dispatch(tr);
