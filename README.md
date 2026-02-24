@@ -184,3 +184,4 @@ This project is licensed under [AGPL-3.0](LICENSE).
 - [Next.js](https://nextjs.org/) — React full-stack framework
 - [Zustand](https://zustand-demo.pmnd.rs/) — State management
 - [KaTeX](https://katex.org/) — Math rendering
+# Author

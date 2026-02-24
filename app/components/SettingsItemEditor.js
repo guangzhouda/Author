@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useI18n } from '../lib/useI18n';
+import { useAppStore } from '../store/useAppStore';
+import { getProjectSettings, saveProjectSettings } from '../lib/settings';
+import { buildContext, compileSystemPrompt } from '../lib/context-engine';
 
 // ==================== 分类配色 ====================
 const CATEGORY_COLORS = {
@@ -14,16 +17,64 @@ const CATEGORY_COLORS = {
     custom: { color: 'var(--cat-custom)', bg: 'var(--cat-custom-bg)' },
 };
 
+const PRESET_ROLE_KEYS = ['protagonist', 'antagonist', 'supporting', 'minor'];
+
+async function streamAiText({ apiEndpoint, systemPrompt, userPrompt, apiConfig, maxTokens }) {
+    const res = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens }),
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        const data = await res.json();
+        throw new Error(data.error || '请求失败');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const event of events) {
+            const trimmed = event.trim();
+            if (!trimmed || trimmed === 'data: [DONE]') continue;
+            if (trimmed.startsWith('data: ')) {
+                try {
+                    const json = JSON.parse(trimmed.slice(6));
+                    if (json.text) fullText += json.text;
+                } catch { }
+            }
+        }
+    }
+    return fullText;
+}
+
 // ==================== 通用字段组件 ====================
 
-function TextField({ label, value, onChange, placeholder, multiline = false, rows = 3, aiBtn = false }) {
+function TextField({ label, value, onChange, placeholder, multiline = false, rows = 3, aiBtn = false, ai }) {
     const { t } = useI18n();
     return (
         <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</label>
                 {aiBtn && (
-                    <button className="field-ai-btn" title={t('settingsEditor.aiFill')}>✦</button>
+                    <button
+                        type="button"
+                        className="field-ai-btn"
+                        title={t('settingsEditor.aiFill')}
+                        onClick={ai?.onClick}
+                        disabled={ai?.loading || !ai?.onClick}
+                    >
+                        {ai?.loading ? '…' : '✦'}
+                    </button>
                 )}
             </div>
             {multiline ? (
@@ -164,10 +215,26 @@ function CharacterCardPreview({ name, content }) {
 
 // ==================== 各分类编辑器 ====================
 
-function CharacterEditor({ node, onUpdate }) {
+function CharacterEditor({ node, onUpdate, getAiProps, customRoles, onAddCustomRole, onRemoveCustomRole }) {
     const { t } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
+    const [customRoleInput, setCustomRoleInput] = useState('');
+
+    const presetRoleLabels = {
+        protagonist: t('settingsEditor.roles.protagonist'),
+        antagonist: t('settingsEditor.roles.antagonist'),
+        supporting: t('settingsEditor.roles.supporting'),
+        minor: t('settingsEditor.roles.minor'),
+    };
+
+    const resolvedCustomRoles = (() => {
+        const list = Array.isArray(customRoles) ? customRoles : [];
+        if (content.role && !PRESET_ROLE_KEYS.includes(content.role) && !list.includes(content.role)) {
+            return [content.role, ...list];
+        }
+        return list;
+    })();
 
     return (
         <div>
@@ -182,6 +249,91 @@ function CharacterEditor({ node, onUpdate }) {
                         { value: 'minor', label: t('settingsEditor.roles.minLabel') },
                     ]}
                 />
+                <div style={{ marginTop: 6, marginBottom: 4 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                        {t('settingsEditor.customRoleTitle')}
+                    </label>
+                    {resolvedCustomRoles.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                            {resolvedCustomRoles.map(role => (
+                                <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => update('role', role)}
+                                        style={{
+                                            padding: '5px 12px', borderRadius: 16, fontSize: 12, border: '1px solid var(--border-light)',
+                                            background: content.role === role ? 'var(--accent)' : 'transparent',
+                                            color: content.role === role ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                                            cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'var(--font-ui)',
+                                        }}
+                                    >
+                                        {role}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveCustomRole?.(role)}
+                                        title={t('common.delete')}
+                                        style={{
+                                            padding: '2px 6px', borderRadius: 10, fontSize: 10, border: '1px solid var(--border-light)',
+                                            background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+                                        }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                            type="text"
+                            value={customRoleInput}
+                            onChange={e => setCustomRoleInput(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const trimmed = customRoleInput.trim();
+                                    if (!trimmed) return;
+                                    const matchPreset = Object.entries(presetRoleLabels).find(([, label]) => label === trimmed);
+                                    if (matchPreset) {
+                                        update('role', matchPreset[0]);
+                                        setCustomRoleInput('');
+                                        return;
+                                    }
+                                    const added = onAddCustomRole?.(trimmed);
+                                    if (added) update('role', added);
+                                    setCustomRoleInput('');
+                                }
+                            }}
+                            placeholder={t('settingsEditor.customRolePlaceholder')}
+                            style={{
+                                flex: 1, padding: '6px 10px', border: '1px solid var(--border-light)', borderRadius: 8,
+                                background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-ui)',
+                                outline: 'none',
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const trimmed = customRoleInput.trim();
+                                if (!trimmed) return;
+                                const matchPreset = Object.entries(presetRoleLabels).find(([, label]) => label === trimmed);
+                                if (matchPreset) {
+                                    update('role', matchPreset[0]);
+                                    setCustomRoleInput('');
+                                    return;
+                                }
+                                const added = onAddCustomRole?.(trimmed);
+                                if (added) update('role', added);
+                                setCustomRoleInput('');
+                            }}
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '6px 10px', fontSize: 11 }}
+                        >
+                            {t('settingsEditor.customRoleAdd')}
+                        </button>
+                    </div>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <TextField label={t('settingsEditor.infoGender')} value={content.gender} onChange={v => update('gender', v)} placeholder={t('settingsEditor.charGenderPlaceholder')} />
                     <TextField label={t('settingsEditor.infoAge')} value={content.age} onChange={v => update('age', v)} placeholder={t('settingsEditor.charAgePlaceholder')} />
@@ -189,20 +341,85 @@ function CharacterEditor({ node, onUpdate }) {
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabAppearance')} icon="✨">
-                <TextField label={t('settingsEditor.charAppearance')} value={content.appearance} onChange={v => update('appearance', v)} placeholder={t('settingsEditor.charAppearancePlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.charPersonality')} value={content.personality} onChange={v => update('personality', v)} placeholder={t('settingsEditor.charPersonalityPlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.charSpeechStyle')} value={content.speechStyle} onChange={v => update('speechStyle', v)} placeholder={t('settingsEditor.charSpeechStylePlaceholder')} multiline aiBtn />
+                <TextField
+                    label={t('settingsEditor.charAppearance')}
+                    value={content.appearance}
+                    onChange={v => update('appearance', v)}
+                    placeholder={t('settingsEditor.charAppearancePlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'appearance', t('settingsEditor.charAppearance'), t('settingsEditor.charAppearancePlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.charPersonality')}
+                    value={content.personality}
+                    onChange={v => update('personality', v)}
+                    placeholder={t('settingsEditor.charPersonalityPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'personality', t('settingsEditor.charPersonality'), t('settingsEditor.charPersonalityPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.charSpeechStyle')}
+                    value={content.speechStyle}
+                    onChange={v => update('speechStyle', v)}
+                    placeholder={t('settingsEditor.charSpeechStylePlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'speechStyle', t('settingsEditor.charSpeechStyle'), t('settingsEditor.charSpeechStylePlaceholder'))}
+                />
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabBackground')} icon="📖" defaultCollapsed>
-                <TextField label={t('settingsEditor.charBackground')} value={content.background} onChange={v => update('background', v)} placeholder={t('settingsEditor.charBackgroundPlaceholder')} multiline rows={4} aiBtn />
-                <TextField label={t('settingsEditor.charMotivation')} value={content.motivation} onChange={v => update('motivation', v)} placeholder={t('settingsEditor.charMotivationPlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.charArc')} value={content.arc} onChange={v => update('arc', v)} placeholder={t('settingsEditor.charArcPlaceholder')} multiline aiBtn />
+                <TextField
+                    label={t('settingsEditor.charBackground')}
+                    value={content.background}
+                    onChange={v => update('background', v)}
+                    placeholder={t('settingsEditor.charBackgroundPlaceholder')}
+                    multiline
+                    rows={4}
+                    aiBtn
+                    ai={getAiProps?.(node, 'background', t('settingsEditor.charBackground'), t('settingsEditor.charBackgroundPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.charMotivation')}
+                    value={content.motivation}
+                    onChange={v => update('motivation', v)}
+                    placeholder={t('settingsEditor.charMotivationPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'motivation', t('settingsEditor.charMotivation'), t('settingsEditor.charMotivationPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.charArc')}
+                    value={content.arc}
+                    onChange={v => update('arc', v)}
+                    placeholder={t('settingsEditor.charArcPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'arc', t('settingsEditor.charArc'), t('settingsEditor.charArcPlaceholder'))}
+                />
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabSkills')} icon="⚔️" defaultCollapsed>
-                <TextField label={t('settingsEditor.charSkills')} value={content.skills} onChange={v => update('skills', v)} placeholder={t('settingsEditor.charSkillsPlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.charRelationships')} value={content.relationships} onChange={v => update('relationships', v)} placeholder={t('settingsEditor.charRelationshipsPlaceholder')} multiline aiBtn />
+                <TextField
+                    label={t('settingsEditor.charSkills')}
+                    value={content.skills}
+                    onChange={v => update('skills', v)}
+                    placeholder={t('settingsEditor.charSkillsPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'skills', t('settingsEditor.charSkills'), t('settingsEditor.charSkillsPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.charRelationships')}
+                    value={content.relationships}
+                    onChange={v => update('relationships', v)}
+                    placeholder={t('settingsEditor.charRelationshipsPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'relationships', t('settingsEditor.charRelationships'), t('settingsEditor.charRelationshipsPlaceholder'))}
+                />
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabNotes')} icon="📝" defaultCollapsed>
@@ -214,7 +431,7 @@ function CharacterEditor({ node, onUpdate }) {
     );
 }
 
-function LocationEditor({ node, onUpdate }) {
+function LocationEditor({ node, onUpdate, getAiProps }) {
     const { t } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
@@ -222,14 +439,47 @@ function LocationEditor({ node, onUpdate }) {
     return (
         <div>
             <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
-                <TextField label={t('settingsEditor.locDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.locDescriptionPlaceholder')} multiline rows={4} aiBtn />
+                <TextField
+                    label={t('settingsEditor.locDescription')}
+                    value={content.description}
+                    onChange={v => update('description', v)}
+                    placeholder={t('settingsEditor.locDescriptionPlaceholder')}
+                    multiline
+                    rows={4}
+                    aiBtn
+                    ai={getAiProps?.(node, 'description', t('settingsEditor.locDescription'), t('settingsEditor.locDescriptionPlaceholder'))}
+                />
                 <TextField label={t('settingsEditor.locSlugline')} value={content.slugline} onChange={v => update('slugline', v)} placeholder={t('settingsEditor.locSluglinePlaceholder')} />
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabSensory')} icon="👁">
-                <TextField label={t('settingsEditor.locVisual')} value={content.sensoryVisual} onChange={v => update('sensoryVisual', v)} placeholder={t('settingsEditor.locVisualPlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.locAudio')} value={content.sensoryAudio} onChange={v => update('sensoryAudio', v)} placeholder={t('settingsEditor.locAudioPlaceholder')} multiline aiBtn />
-                <TextField label={t('settingsEditor.locSmell')} value={content.sensorySmell} onChange={v => update('sensorySmell', v)} placeholder={t('settingsEditor.locSmellPlaceholder')} multiline aiBtn />
+                <TextField
+                    label={t('settingsEditor.locVisual')}
+                    value={content.sensoryVisual}
+                    onChange={v => update('sensoryVisual', v)}
+                    placeholder={t('settingsEditor.locVisualPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'sensoryVisual', t('settingsEditor.locVisual'), t('settingsEditor.locVisualPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.locAudio')}
+                    value={content.sensoryAudio}
+                    onChange={v => update('sensoryAudio', v)}
+                    placeholder={t('settingsEditor.locAudioPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'sensoryAudio', t('settingsEditor.locAudio'), t('settingsEditor.locAudioPlaceholder'))}
+                />
+                <TextField
+                    label={t('settingsEditor.locSmell')}
+                    value={content.sensorySmell}
+                    onChange={v => update('sensorySmell', v)}
+                    placeholder={t('settingsEditor.locSmellPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'sensorySmell', t('settingsEditor.locSmell'), t('settingsEditor.locSmellPlaceholder'))}
+                />
             </FieldGroup>
 
             <FieldGroup title={t('settingsEditor.tabMood')} icon="🌙" defaultCollapsed>
@@ -248,7 +498,7 @@ function LocationEditor({ node, onUpdate }) {
     );
 }
 
-function ObjectEditor({ node, onUpdate }) {
+function ObjectEditor({ node, onUpdate, getAiProps }) {
     const { t } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
@@ -256,7 +506,16 @@ function ObjectEditor({ node, onUpdate }) {
     return (
         <div>
             <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
-                <TextField label={t('settingsEditor.objDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.objDescriptionPlaceholder')} multiline rows={4} aiBtn />
+                <TextField
+                    label={t('settingsEditor.objDescription')}
+                    value={content.description}
+                    onChange={v => update('description', v)}
+                    placeholder={t('settingsEditor.objDescriptionPlaceholder')}
+                    multiline
+                    rows={4}
+                    aiBtn
+                    ai={getAiProps?.(node, 'description', t('settingsEditor.objDescription'), t('settingsEditor.objDescriptionPlaceholder'))}
+                />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <TextField label={t('settingsEditor.objType')} value={content.objectType} onChange={v => update('objectType', v)} placeholder={t('settingsEditor.objTypePlaceholder')} />
                     <TextField label={t('settingsEditor.objRank')} value={content.rank} onChange={v => update('rank', v)} placeholder={t('settingsEditor.objRankPlaceholder')} />
@@ -266,7 +525,15 @@ function ObjectEditor({ node, onUpdate }) {
             <FieldGroup title={t('settingsEditor.tabStats')} icon="📊" defaultCollapsed>
                 <TextField label={t('settingsEditor.objHolder')} value={content.currentHolder} onChange={v => update('currentHolder', v)} placeholder={t('settingsEditor.objHolderPlaceholder')} />
                 <TextField label={t('settingsEditor.objStats')} value={content.numericStats} onChange={v => update('numericStats', v)} placeholder={t('settingsEditor.objStatsPlaceholder')} multiline />
-                <TextField label={t('settingsEditor.objSymbolism')} value={content.symbolism} onChange={v => update('symbolism', v)} placeholder={t('settingsEditor.objSymbolismPlaceholder')} multiline aiBtn />
+                <TextField
+                    label={t('settingsEditor.objSymbolism')}
+                    value={content.symbolism}
+                    onChange={v => update('symbolism', v)}
+                    placeholder={t('settingsEditor.objSymbolismPlaceholder')}
+                    multiline
+                    aiBtn
+                    ai={getAiProps?.(node, 'symbolism', t('settingsEditor.objSymbolism'), t('settingsEditor.objSymbolismPlaceholder'))}
+                />
             </FieldGroup>
 
             <ExtraFieldsSection content={content} knownFields={['description', 'objectType', 'rank', 'currentHolder', 'numericStats', 'symbolism']} onUpdate={update} />
@@ -274,21 +541,30 @@ function ObjectEditor({ node, onUpdate }) {
     );
 }
 
-function WorldEditor({ node, onUpdate }) {
+function WorldEditor({ node, onUpdate, getAiProps }) {
     const { t } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
 
     return (
         <div>
-            <TextField label={t('settingsEditor.worldDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.worldDescriptionPlaceholder')} multiline rows={6} aiBtn />
+            <TextField
+                label={t('settingsEditor.worldDescription')}
+                value={content.description}
+                onChange={v => update('description', v)}
+                placeholder={t('settingsEditor.worldDescriptionPlaceholder')}
+                multiline
+                rows={6}
+                aiBtn
+                ai={getAiProps?.(node, 'description', t('settingsEditor.worldDescription'), t('settingsEditor.worldDescriptionPlaceholder'))}
+            />
             <TextField label={t('settingsEditor.worldNotes')} value={content.notes} onChange={v => update('notes', v)} placeholder={t('settingsEditor.worldNotesPlaceholder')} multiline />
             <ExtraFieldsSection content={content} knownFields={['description', 'notes']} onUpdate={update} />
         </div>
     );
 }
 
-function PlotEditor({ node, onUpdate }) {
+function PlotEditor({ node, onUpdate, getAiProps }) {
     const { t } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
@@ -302,7 +578,16 @@ function PlotEditor({ node, onUpdate }) {
                     { value: 'done', label: t('settingsEditor.statusDone') },
                 ]}
             />
-            <TextField label={t('settingsEditor.plotDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.plotDescriptionPlaceholder')} multiline rows={6} aiBtn />
+            <TextField
+                label={t('settingsEditor.plotDescription')}
+                value={content.description}
+                onChange={v => update('description', v)}
+                placeholder={t('settingsEditor.plotDescriptionPlaceholder')}
+                multiline
+                rows={6}
+                aiBtn
+                ai={getAiProps?.(node, 'description', t('settingsEditor.plotDescription'), t('settingsEditor.plotDescriptionPlaceholder'))}
+            />
             <TextField label={t('settingsEditor.plotNotes')} value={content.notes} onChange={v => update('notes', v)} placeholder={t('settingsEditor.plotNotesPlaceholder')} multiline />
             <ExtraFieldsSection content={content} knownFields={['status', 'description', 'notes']} onUpdate={update} />
         </div>
@@ -424,6 +709,128 @@ function EmptyState() {
 // ==================== 主组件 ====================
 
 export default function SettingsItemEditor({ selectedNode, allNodes, onUpdate, onSelect, onAdd }) {
+    const { t } = useI18n();
+    const { showToast, activeChapterId, contextSelection } = useAppStore();
+    const [aiLoading, setAiLoading] = useState(new Set());
+    const [customRoles, setCustomRoles] = useState(() => {
+        const settings = getProjectSettings();
+        return Array.isArray(settings?.customRoles) ? settings.customRoles : [];
+    });
+
+    const handleAddCustomRole = useCallback((role) => {
+        const name = role?.trim();
+        if (!name) return null;
+        const settings = getProjectSettings();
+        const existing = Array.isArray(settings?.customRoles) ? settings.customRoles : [];
+        if (existing.includes(name)) return name;
+        const next = [...existing, name];
+        saveProjectSettings({ ...settings, customRoles: next });
+        setCustomRoles(next);
+        return name;
+    }, []);
+
+    const handleRemoveCustomRole = useCallback((role) => {
+        const settings = getProjectSettings();
+        const existing = Array.isArray(settings?.customRoles) ? settings.customRoles : [];
+        const next = existing.filter(r => r !== role);
+        saveProjectSettings({ ...settings, customRoles: next });
+        setCustomRoles(next);
+    }, []);
+
+    const setAiLoadingFlag = useCallback((key, loading) => {
+        setAiLoading(prev => {
+            const next = new Set(prev);
+            if (loading) next.add(key);
+            else next.delete(key);
+            return next;
+        });
+    }, []);
+
+    const handleAiFill = useCallback(async ({ node, fieldKey, label }) => {
+        if (!node || !fieldKey) return;
+        const loadingKey = `${node.id}:${fieldKey}`;
+        if (aiLoading.has(loadingKey)) return;
+
+        const { apiConfig } = getProjectSettings();
+        if (!apiConfig?.apiKey) {
+            showToast('请先在 API 配置中填写 Key', 'error');
+            return;
+        }
+
+        setAiLoadingFlag(loadingKey, true);
+        try {
+            const categoryLabel = t(`settings.categories.${node.category}`) || node.category;
+            const name = node.name || '未命名';
+            const currentValue = node.content?.[fieldKey] || '';
+            const actionHint = currentValue.trim() ? '在保留原意基础上补充润色' : '生成';
+
+            const roleLabels = {
+                protagonist: t('settingsEditor.roles.protagonist'),
+                antagonist: t('settingsEditor.roles.antagonist'),
+                supporting: t('settingsEditor.roles.supporting'),
+                minor: t('settingsEditor.roles.minor'),
+            };
+            const roleLabel = roleLabels[node.content?.role] || node.content?.role || '';
+
+            const extraHints = [];
+            if (roleLabel) extraHints.push(`角色身份：${roleLabel}。`);
+            if (fieldKey === 'relationships') {
+                extraHints.push(`关系描述只写与“${name}”相关的其他角色，避免用“主角/男主/女主/反派”等泛称指代该角色本人。`);
+                const otherNames = (allNodes || [])
+                    .filter(n => n.type === 'item' && n.category === 'character' && n.id !== node.id)
+                    .map(n => n.name)
+                    .filter(Boolean);
+                if (otherNames.length > 0) {
+                    extraHints.push(`可参考角色：${otherNames.slice(0, 8).join('、')}。`);
+                }
+            }
+
+            const instruction = `请为${categoryLabel}「${name}」的「${label || fieldKey}」${actionHint}。要求：中文，简洁，2-4句，不要标题、不要列表、不要引号，只输出内容本身。${extraHints.length ? `\n补充要求：${extraHints.join(' ')}` : ''}`;
+            const userPrompt = currentValue.trim()
+                ? `${instruction}\n\n现有内容：${currentValue.trim()}`
+                : instruction;
+
+            const queryText = [name, label, currentValue].filter(Boolean).join(' ');
+            const context = await buildContext(activeChapterId, queryText, contextSelection?.size ? contextSelection : null);
+            const systemPrompt = compileSystemPrompt(context, 'chat');
+            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
+
+            const output = await streamAiText({
+                apiEndpoint,
+                systemPrompt,
+                userPrompt,
+                apiConfig,
+                maxTokens: 600,
+            });
+
+            let cleaned = output.trim();
+            if (cleaned.startsWith('```')) {
+                cleaned = cleaned.replace(/^```[a-z]*\n?/i, '').replace(/```$/, '').trim();
+            }
+            cleaned = cleaned.replace(/^["“”]+|["“”]+$/g, '').trim();
+            if (!cleaned) {
+                showToast('AI 返回为空，请重试', 'error');
+                return;
+            }
+
+            onUpdate(node.id, { content: { ...(node.content || {}), [fieldKey]: cleaned } });
+            showToast('AI 已填充', 'success');
+        } catch (err) {
+            console.error('AI 填写失败:', err);
+            showToast(`AI 填写失败：${err.message || '未知错误'}`, 'error');
+        } finally {
+            setAiLoadingFlag(loadingKey, false);
+        }
+    }, [activeChapterId, aiLoading, allNodes, contextSelection, onUpdate, setAiLoadingFlag, showToast, t]);
+
+    const getAiProps = useCallback((node, fieldKey, label) => {
+        const key = `${node.id}:${fieldKey}`;
+        return {
+            loading: aiLoading.has(key),
+            onClick: () => handleAiFill({ node, fieldKey, label }),
+        };
+    }, [aiLoading, handleAiFill]);
+
     if (!selectedNode) return <EmptyState />;
 
     // 文件夹 → 显示文件夹信息
@@ -451,7 +858,14 @@ export default function SettingsItemEditor({ selectedNode, allNodes, onUpdate, o
     return (
         <div style={{ padding: 20 }}>
             <Breadcrumb node={selectedNode} allNodes={allNodes} onSelect={onSelect} />
-            <EditorComponent node={selectedNode} onUpdate={onUpdate} />
+            <EditorComponent
+                node={selectedNode}
+                onUpdate={onUpdate}
+                getAiProps={getAiProps}
+                customRoles={customRoles}
+                onAddCustomRole={handleAddCustomRole}
+                onRemoveCustomRole={handleRemoveCustomRole}
+            />
         </div>
     );
 }

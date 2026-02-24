@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import {
     getProjectSettings,
@@ -43,12 +43,6 @@ export default function SettingsPanel() {
         setJumpToNodeId,
     } = useAppStore();
 
-    const onClose = () => {
-        setShowSettings(false);
-        setGlobalWritingMode(getWritingMode());
-        incrementSettingsVersion();
-    };
-
     const [settings, setSettings] = useState(null);
     const [activeTab, setActiveTab] = useState('settings');
     const [nodes, setNodes] = useState([]);
@@ -61,6 +55,27 @@ export default function SettingsPanel() {
     const { t } = useI18n();
 
     const [expandedCategory, setExpandedCategory] = useState(null);
+    const pendingSaveRef = useRef(new Map());
+    const pendingUpdatesRef = useRef(new Map());
+
+    const flushPendingSaves = () => {
+        pendingSaveRef.current.forEach((timeoutId, id) => {
+            clearTimeout(timeoutId);
+            const merged = pendingUpdatesRef.current.get(id);
+            if (merged) {
+                updateSettingsNode(id, merged);
+            }
+        });
+        pendingSaveRef.current.clear();
+        pendingUpdatesRef.current.clear();
+    };
+
+    const onClose = () => {
+        flushPendingSaves();
+        setShowSettings(false);
+        setGlobalWritingMode(getWritingMode());
+        incrementSettingsVersion();
+    };
 
     // 获取当前作品的节点
     useEffect(() => {
@@ -210,9 +225,29 @@ export default function SettingsPanel() {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, enabled: newEnabled } : n));
     };
 
-    const handleUpdateNode = async (id, updates) => {
-        await updateSettingsNode(id, updates);
+    const scheduleNodeSave = (id, updates, delayMs) => {
+        const pending = pendingUpdatesRef.current.get(id) || {};
+        pendingUpdatesRef.current.set(id, { ...pending, ...updates });
+        const existing = pendingSaveRef.current.get(id);
+        if (existing) clearTimeout(existing);
+        const timeoutId = setTimeout(async () => {
+            const merged = pendingUpdatesRef.current.get(id);
+            pendingUpdatesRef.current.delete(id);
+            pendingSaveRef.current.delete(id);
+            if (!merged) return;
+            try {
+                await updateSettingsNode(id, merged);
+            } catch (err) {
+                console.error('保存设定集失败:', err);
+            }
+        }, delayMs);
+        pendingSaveRef.current.set(id, timeoutId);
+    };
+
+    const handleUpdateNode = (id, updates) => {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n));
+        const shouldDebounce = updates.content !== undefined || updates.name !== undefined;
+        scheduleNodeSave(id, updates, shouldDebounce ? 400 : 0);
     };
 
     const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);

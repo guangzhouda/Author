@@ -105,6 +105,8 @@ export const WRITING_MODES = {
 const DEFAULT_SETTINGS = {
     // 写作模式
     writingMode: 'webnovel',
+    // 自定义角色标签
+    customRoles: [],
 
     // API 配置 — 用户自己填入 API Key
     apiConfig: {

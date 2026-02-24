@@ -60,6 +60,9 @@
             "supLabel": "👥 配角",
             "minLabel": "🚶 路人"
         },
+        "customRoleTitle": "自定义角色",
+        "customRolePlaceholder": "如：男二 / 师父 / 宿敌",
+        "customRoleAdd": "添加",
         "infoGender": "性别",
         "infoAge": "年龄",
         "infoPersonality": "性格",

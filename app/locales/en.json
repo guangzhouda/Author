@@ -60,6 +60,9 @@
       "supLabel": "👥 Supporting",
       "minLabel": "🚶 Minor"
     },
+    "customRoleTitle": "Custom Roles",
+    "customRolePlaceholder": "e.g. Deuteragonist / Mentor / Rival",
+    "customRoleAdd": "Add",
     "infoGender": "Gender",
     "infoAge": "Age",
     "infoPersonality": "Personality",
