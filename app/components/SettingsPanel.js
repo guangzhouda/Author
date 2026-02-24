@@ -275,7 +275,14 @@ export default function SettingsPanel() {
                         ⚙️ {t('settings.title')}
                         <span className="subtitle">— {t('settings.subtitle')}</span>
                     </h2>
-                    <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+                    <button
+                        className="btn btn-primary btn-sm"
+                        style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
+                        onClick={onClose}
+                        title="进入富文本编辑"
+                    >
+                        📝 富文本编辑
+                    </button>
                 </div>
 
                 {/* Tab 导航 */}
