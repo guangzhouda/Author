@@ -19,7 +19,7 @@ import {
     getAllWorks,
     rebuildAllEmbeddings,
 } from '../lib/settings';
-import SettingsTree from './SettingsTree';
+import SettingsCategoryNav from './SettingsCategoryNav';
 import { useI18n } from '../lib/useI18n';
 import SettingsItemEditor from './SettingsItemEditor';
 
@@ -55,6 +55,13 @@ export default function SettingsPanel() {
     const { t } = useI18n();
 
     const [expandedCategory, setExpandedCategory] = useState(null);
+    const [navWidth, setNavWidth] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = parseInt(localStorage.getItem('author-settings-nav-width') || '', 10);
+            if (!Number.isNaN(saved) && saved >= 200) return saved;
+        }
+        return 280;
+    });
     const pendingSaveRef = useRef(new Map());
     const pendingUpdatesRef = useRef(new Map());
 
@@ -389,7 +396,7 @@ export default function SettingsPanel() {
                         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                             {/* 左侧：搜索 + 树形导航 */}
                             <div style={{
-                                width: 260, minWidth: 260, borderRight: '1px solid var(--border-light)',
+                                width: navWidth, minWidth: 220, maxWidth: 520, borderRight: '1px solid var(--border-light)',
                                 display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)',
                             }}>
                                 {/* 搜索框 */}
@@ -403,10 +410,11 @@ export default function SettingsPanel() {
                                     />
                                 </div>
 
-                                {/* 树 */}
+                                {/* 分类导航 (方案 C) */}
                                 <div style={{ flex: 1, overflow: 'auto' }}>
-                                    <SettingsTree
+                                    <SettingsCategoryNav
                                         nodes={visibleNodes}
+                                        activeWorkId={activeWorkId}
                                         selectedId={selectedNodeId}
                                         onSelect={setSelectedNodeId}
                                         onAdd={handleAddNode}
@@ -419,6 +427,30 @@ export default function SettingsPanel() {
                                     />
                                 </div>
                             </div>
+
+                            {/* 可拖拽分隔条 */}
+                            <div
+                                className="settings-sidebar-resizer"
+                                onPointerDown={(e) => {
+                                    e.preventDefault();
+                                    const startX = e.clientX;
+                                    const startW = navWidth;
+                                    let lastW = startW;
+                                    const onMove = (ev) => {
+                                        const next = Math.max(220, Math.min(520, startW + (ev.clientX - startX)));
+                                        setNavWidth(next);
+                                        lastW = next;
+                                    };
+                                    const onUp = () => {
+                                        document.removeEventListener('pointermove', onMove);
+                                        document.removeEventListener('pointerup', onUp);
+                                        localStorage.setItem('author-settings-nav-width', String(lastW));
+                                    };
+                                    document.addEventListener('pointermove', onMove);
+                                    document.addEventListener('pointerup', onUp);
+                                }}
+                                title="拖拽调整侧栏宽度"
+                            />
 
                             {/* 右侧：编辑器 */}
                             <div style={{ flex: 1, overflow: 'auto' }}>

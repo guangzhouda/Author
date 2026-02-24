@@ -1891,6 +1891,64 @@ body {
   padding: 6px 8px;
 }
 
+.settings-category-nav {
+  padding: 8px 8px 12px;
+}
+
+.settings-category-section {
+  margin-bottom: 10px;
+}
+
+.settings-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.settings-category-header:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-category-items {
+  margin-top: 6px;
+}
+
+.settings-sidebar-resizer {
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.settings-sidebar-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--border-light);
+  opacity: 0.5;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.settings-sidebar-resizer:hover::before {
+  opacity: 1;
+  background: var(--accent);
+}
+
 .tree-node {
   user-select: none;
 }

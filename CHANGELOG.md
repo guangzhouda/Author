@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8 - 2026-02-24
+- 设定集：左侧导航改为按分类分组（方案 C），更清晰。
+- 设定集：左侧侧栏支持拖拽调整宽度（本地记忆）。
+
 ## 1.1.7 - 2026-02-24
 - Settings: center Preferences content and improve layout consistency (writing-mode cards no longer stretch awkwardly).
 - Settings: add Focus Mode toggle to Preferences (left-side Settings entry point).
