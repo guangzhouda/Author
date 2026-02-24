@@ -1173,7 +1173,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
 // ==================== 状态栏 ====================
 function StatusBar({ editor, pageCount }) {
-    const { writingMode, setWritingMode, incrementSettingsVersion, showToast } = useAppStore();
+    const { writingMode, setWritingMode, incrementSettingsVersion, showToast, focusMode, toggleFocusMode } = useAppStore();
     if (!editor) return null;
 
     const characterCount = editor.storage.characterCount;
@@ -1190,6 +1190,31 @@ function StatusBar({ editor, pageCount }) {
         showToast(`已切换为 ${label}`, 'info');
     };
 
+    const requestFullscreen = () => {
+        const el = document.documentElement;
+        const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (!fn) return;
+        return fn.call(el);
+    };
+
+    const exitFullscreen = () => {
+        const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (!fn) return;
+        return fn.call(document);
+    };
+
+    const handleToggleFocusMode = () => {
+        const next = !focusMode;
+        toggleFocusMode();
+        showToast(next ? '已进入专注模式' : '已退出专注模式', 'info');
+
+        // Best-effort browser fullscreen; layout focus mode still works even if fullscreen is blocked.
+        try {
+            const ret = next ? requestFullscreen() : exitFullscreen();
+            if (ret && typeof ret.catch === 'function') ret.catch(() => { });
+        } catch { /* ignore */ }
+    };
+
     return (
         <div className="status-bar">
             <div className="status-bar-left">
@@ -1198,6 +1223,28 @@ function StatusBar({ editor, pageCount }) {
                 <span style={{ color: 'var(--accent)', fontWeight: 600 }}>共 {pageCount} 页</span>
             </div>
             <div className="status-bar-right">
+                <button
+                    type="button"
+                    onClick={handleToggleFocusMode}
+                    style={{
+                        padding: '3px 10px',
+                        borderRadius: 10,
+                        border: '1px solid var(--border-light)',
+                        background: focusMode ? 'var(--accent-light)' : 'var(--bg-primary)',
+                        color: focusMode ? 'var(--accent)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        whiteSpace: 'nowrap',
+                    }}
+                    title={focusMode ? '退出专注/全屏' : '专注/全屏'}
+                >
+                    <span style={{ fontSize: 12 }}>⛶</span>
+                    <span>{focusMode ? '退出专注' : '专注模式'}</span>
+                </button>
                 <div
                     style={{
                         display: 'flex',

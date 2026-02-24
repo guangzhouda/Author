@@ -33,6 +33,18 @@ export const useAppStore = create((set, get) => ({
     theme: 'light',
     setTheme: (theme) => set({ theme }),
 
+    // Focus mode (hide sidebars / distraction-free writing)
+    focusMode: typeof window !== 'undefined' ? (localStorage.getItem('author-focus-mode') === '1') : false,
+    setFocusMode: (on) => set(() => {
+        if (typeof window !== 'undefined') localStorage.setItem('author-focus-mode', on ? '1' : '0');
+        return { focusMode: on };
+    }),
+    toggleFocusMode: () => set((state) => {
+        const next = !state.focusMode;
+        if (typeof window !== 'undefined') localStorage.setItem('author-focus-mode', next ? '1' : '0');
+        return { focusMode: next };
+    }),
+
     writingMode: 'webnovel',
     setWritingMode: (mode) => set({ writingMode: mode }),
 

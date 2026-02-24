@@ -39,6 +39,7 @@ export default function Home() {
     showSettings, setShowSettings,
     showSnapshots, setShowSnapshots,
     theme, setTheme,
+    focusMode,
     writingMode, setWritingMode,
     toast, showToast,
     contextSelection, setContextSelection,
@@ -245,13 +246,13 @@ export default function Home() {
   }, [showToast]);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${focusMode ? 'focus-mode' : ''}`}>
       {/* ===== 侧边栏 ===== */}
-      <Sidebar />
+      {!focusMode && <Sidebar />}
 
       {/* ===== 主内容 ===== */}
       <main className="main-content">
-        {!sidebarOpen && (
+        {!focusMode && !sidebarOpen && (
           <button
             className="btn btn-ghost btn-icon"
             style={{
@@ -293,7 +294,7 @@ export default function Home() {
           </div>
         )}
         {/* AI 侧栏浮动开关 */}
-        {!aiSidebarOpen && (
+        {!focusMode && !aiSidebarOpen && (
           <button
             id="tour-ai-btn"
             className="ai-sidebar-toggle"
@@ -305,7 +306,7 @@ export default function Home() {
         )}
 
         {/* 独立可拖动浮动按钮 */}
-        {['github', 'help'].map(btnKey => {
+        {!focusMode && ['github', 'help'].map(btnKey => {
           const storageKey = `author-fab-${btnKey}`;
           const pos = fabPositions[btnKey];
           const makeDraggable = (e) => {
@@ -522,7 +523,7 @@ export default function Home() {
       </main>
 
       {/* ===== AI 对话侧栏 ===== */}
-      <AiSidebar onInsertText={handleInsertFromArchive} />
+      {!focusMode && <AiSidebar onInsertText={handleInsertFromArchive} />}
 
 
       {/* ===== Toast 通知 ===== */}

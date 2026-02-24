@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.6 - 2026-02-24
+- Focus mode: one-click distraction-free writing (hide sidebars + widen editor; best-effort browser fullscreen).
+
 ## 1.1.5 - 2026-02-24
 - Editor: add one-click writing mode switch in the bottom status bar.
 

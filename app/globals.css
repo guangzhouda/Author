@@ -225,6 +225,15 @@ body {
   position: relative;
 }
 
+.app-layout.focus-mode {
+  /* Distraction-free writing: let the document use the full viewport width */
+  --editor-max-width: 100%;
+}
+
+.app-layout.focus-mode .editor-container {
+  padding: 24px 16px 56px;
+}
+
 .sidebar {
   position: absolute !important;
   top: 0 !important;
