@@ -176,7 +176,7 @@ function ExtraFieldsSection({ content, knownFields, onUpdate }) {
 
 // ==================== 角色卡片预览 ====================
 
-function CharacterCardPreview({ name, content }) {
+function CharacterCardPreview({ name, content, onRename }) {
     const { t } = useI18n();
     const c = content || {};
     const catColor = CATEGORY_COLORS.character;
@@ -198,7 +198,17 @@ function CharacterCardPreview({ name, content }) {
                     {avatarChar}
                 </div>
                 <div className="character-card-info">
-                    <div className="character-card-name">{name || t('settingsEditor.unnamedChar')}</div>
+                    {onRename ? (
+                        <input
+                            className="character-card-name-input"
+                            value={name || ''}
+                            onChange={(e) => onRename(e.target.value)}
+                            placeholder={t('settingsEditor.unnamedChar')}
+                            spellCheck={false}
+                        />
+                    ) : (
+                        <div className="character-card-name">{name || t('settingsEditor.unnamedChar')}</div>
+                    )}
                     <span className="character-card-role" style={{ background: `${catColor.color}18`, color: catColor.color }}>
                         {roleLabel}
                     </span>
@@ -238,7 +248,7 @@ function CharacterEditor({ node, onUpdate, getAiProps, customRoles, onAddCustomR
 
     return (
         <div>
-            <CharacterCardPreview name={node.name} content={content} />
+            <CharacterCardPreview name={node.name} content={content} onRename={(newName) => onUpdate(node.id, { name: newName })} />
 
             <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
                 <ButtonGroup label={t('settingsEditor.charRole')} value={content.role} onChange={v => update('role', v)}

@@ -2176,6 +2176,29 @@ body {
   letter-spacing: 0.5px;
 }
 
+.character-card-name-input {
+  width: 100%;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+}
+
+.character-card-name-input::placeholder {
+  color: var(--text-muted);
+}
+
+.character-card-name-input:focus {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: var(--accent);
+}
+
 .character-card-role {
   display: inline-flex;
   padding: 3px 12px;
