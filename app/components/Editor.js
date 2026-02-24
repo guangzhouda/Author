@@ -18,6 +18,7 @@ import { PageBreakExtension } from './PageBreakExtension';
 import GhostMark from './GhostMark';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { WRITING_MODES, setWritingMode as persistWritingMode } from '../lib/settings';
 
 // ==================== AI 模式配置 ====================
 const AI_MODES = [
@@ -1172,11 +1173,22 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
 // ==================== 状态栏 ====================
 function StatusBar({ editor, pageCount }) {
+    const { writingMode, setWritingMode, incrementSettingsVersion, showToast } = useAppStore();
     if (!editor) return null;
 
     const characterCount = editor.storage.characterCount;
     const chars = characterCount?.characters() ?? 0;
     const words = editor.getText().replace(/\s/g, '').length;
+
+    const modeOrder = ['webnovel', 'traditional', 'screenplay'];
+    const handleSwitchMode = (modeKey) => {
+        if (!modeKey || writingMode === modeKey) return;
+        persistWritingMode(modeKey);
+        setWritingMode(modeKey);
+        incrementSettingsVersion();
+        const label = WRITING_MODES[modeKey]?.label || modeKey;
+        showToast(`已切换为 ${label}`, 'info');
+    };
 
     return (
         <div className="status-bar">
@@ -1186,6 +1198,48 @@ function StatusBar({ editor, pageCount }) {
                 <span style={{ color: 'var(--accent)', fontWeight: 600 }}>共 {pageCount} 页</span>
             </div>
             <div className="status-bar-right">
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '2px 4px',
+                        borderRadius: 10,
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-light)',
+                    }}
+                    title="写作模式"
+                >
+                    {modeOrder.map(key => {
+                        const m = WRITING_MODES[key];
+                        if (!m) return null;
+                        const active = writingMode === key;
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleSwitchMode(key)}
+                                style={{
+                                    padding: '3px 10px',
+                                    borderRadius: 8,
+                                    border: active ? `1px solid ${m.color}` : '1px solid transparent',
+                                    background: active ? `${m.color}18` : 'transparent',
+                                    color: active ? m.color : 'var(--text-muted)',
+                                    cursor: active ? 'default' : 'pointer',
+                                    fontSize: 11,
+                                    fontWeight: active ? 700 : 600,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                <span style={{ fontSize: 12 }}>{m.icon}</span>
+                                <span>{m.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
                 <span className="status-bar-shortcut">Ctrl+J AI助手</span>
                 <span>自动保存</span>
                 <span style={{ opacity: 0.5, fontSize: '11px' }}>© 2026 YuanShiJiLoong</span>

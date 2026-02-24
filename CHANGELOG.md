@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.5 - 2026-02-24
+- Editor: add one-click writing mode switch in the bottom status bar.
+
 ## 1.1.4 - 2026-02-24
 - Settings: make the settings panel full-screen for easier editing.
 
