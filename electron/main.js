@@ -1,7 +1,8 @@
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const path = require('path');
-const { fork } = require('child_process');
+const { fork, execSync } = require('child_process');
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 
 // 日志文件 - 写到用户桌面方便查看
@@ -24,9 +25,11 @@ let mainWindow;
 let serverProcess;
 
 const isDev = process.argv.includes('--dev');
-const PORT = 3000;
+const BASE_PORT = 3000;
+let actualPort = BASE_PORT;
 let loadRetries = 0;
 const MAX_LOAD_RETRIES = 10;
+let serverReady = false; // 追踪服务器是否真正就绪
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -44,7 +47,7 @@ function createWindow() {
         show: false,
     });
 
-    mainWindow.loadURL(`http://localhost:${PORT}`);
+    mainWindow.loadURL(`http://localhost:${actualPort}`);
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
@@ -63,7 +66,7 @@ function createWindow() {
         if (loadRetries < MAX_LOAD_RETRIES) {
             setTimeout(() => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.loadURL(`http://localhost:${PORT}`);
+                    mainWindow.loadURL(`http://localhost:${actualPort}`);
                 }
             }, 2000);
         } else {
@@ -76,9 +79,13 @@ function createWindow() {
         }
     });
 
+    // 只有真正加载了 localhost 页面才重置重试计数器
     mainWindow.webContents.on('did-finish-load', () => {
-        log('Page loaded successfully');
-        loadRetries = 0;
+        const url = mainWindow.webContents.getURL();
+        if (url.includes('localhost')) {
+            log('Page loaded successfully: ' + url);
+            loadRetries = 0;
+        }
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -94,7 +101,51 @@ function createWindow() {
     });
 }
 
-function waitForServer(port, maxRetries = 30) {
+// 检测端口是否可用
+function isPortAvailable(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+        server.once('error', () => resolve(false));
+        server.once('listening', () => {
+            server.close(() => resolve(true));
+        });
+        server.listen(port, '127.0.0.1');
+    });
+}
+
+// 查找可用端口
+async function findAvailablePort(startPort, maxTries = 10) {
+    for (let i = 0; i < maxTries; i++) {
+        const port = startPort + i;
+        if (await isPortAvailable(port)) {
+            return port;
+        }
+        log(`Port ${port} is in use, trying next...`);
+    }
+    return null;
+}
+
+// 尝试杀掉占用端口的进程 (Windows)
+function tryKillPortProcess(port) {
+    try {
+        if (process.platform === 'win32') {
+            const result = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { encoding: 'utf8', timeout: 5000 });
+            const lines = result.trim().split('\n');
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                const pid = parts[parts.length - 1];
+                if (pid && pid !== '0') {
+                    log(`Killing process ${pid} on port ${port}`);
+                    try { execSync(`taskkill /F /PID ${pid}`, { timeout: 5000 }); } catch (e) { }
+                }
+            }
+        }
+    } catch (e) {
+        // 没有进程占用或命令失败，忽略
+    }
+}
+
+function waitForServer(port, maxRetries = 60) {
     return new Promise((resolve) => {
         let retries = 0;
         const check = () => {
@@ -109,7 +160,7 @@ function waitForServer(port, maxRetries = 30) {
                     setTimeout(check, 1000);
                 }
             });
-            req.setTimeout(2000, () => {
+            req.setTimeout(3000, () => {
                 req.destroy();
                 retries++;
                 if (retries >= maxRetries) {
@@ -162,6 +213,23 @@ function startNextServer() {
             return;
         }
 
+        // 尝试释放被占用的端口
+        tryKillPortProcess(BASE_PORT);
+
+        // 等待一下让端口释放
+        await new Promise(r => setTimeout(r, 500));
+
+        // 查找可用端口
+        actualPort = await findAvailablePort(BASE_PORT);
+        if (!actualPort) {
+            const msg = `端口 ${BASE_PORT}-${BASE_PORT + 9} 全部被占用，无法启动服务器。`;
+            log('ERROR: ' + msg);
+            dialog.showErrorBox('Author 启动失败', msg);
+            resolve(false);
+            return;
+        }
+
+        log(`Using port: ${actualPort}`);
         log('Starting Next.js server via fork...');
 
         serverProcess = fork(serverPath, [], {
@@ -169,9 +237,8 @@ function startNextServer() {
             env: {
                 ...process.env,
                 NODE_ENV: 'production',
-                PORT: String(PORT),
-                HOSTNAME: 'localhost',
-                ELECTRON_RUN_AS_NODE: '1',
+                PORT: String(actualPort),
+                HOSTNAME: '0.0.0.0',
             },
             stdio: 'pipe',
         });
@@ -190,9 +257,11 @@ function startNextServer() {
 
         serverProcess.on('close', (code) => {
             log('[Server process closed] code: ' + code);
+            serverReady = false;
         });
 
-        const ready = await waitForServer(PORT);
+        const ready = await waitForServer(actualPort);
+        serverReady = ready;
         log(`Server ready: ${ready}`);
         resolve(ready);
     });
@@ -206,7 +275,23 @@ app.whenReady().then(async () => {
     log(`App path: ${app.getAppPath()}`);
     log(`Exe path: ${process.execPath}`);
 
-    await startNextServer();
+    const ready = await startNextServer();
+
+    if (!ready) {
+        log('Server failed to start. Showing error dialog.');
+        dialog.showErrorBox(
+            'Author 启动失败',
+            '内置服务器无法启动。\n\n' +
+            '可能原因：\n' +
+            '1. 端口被其他程序占用\n' +
+            '2. 缺少运行文件\n' +
+            '3. 防火墙或杀毒软件拦截\n\n' +
+            '查看日志: ' + logFile
+        );
+        app.quit();
+        return;
+    }
+
     createWindow();
 });
 
