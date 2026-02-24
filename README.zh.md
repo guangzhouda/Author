@@ -97,10 +97,11 @@ cd author
 # 安装依赖
 npm install
 
-# 配置环境变量（可选）
-cp .env.example .env.local
-# 编辑 .env.local 填入你的 API Key
-# 也可以在应用内「设置」面板中配置
+# 配置 API Key（可选）
+# 推荐：启动后在「设定集管理」→「API配置」中填写
+# 或者手动创建 `.env.local` 并设置服务器侧环境变量（部署时更方便）：
+#   ZHIPU_API_KEY=...
+#   GEMINI_API_KEY=...
 ```
 
 ### 启动开发服务器

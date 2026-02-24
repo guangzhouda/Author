@@ -1,4 +1,8 @@
-# Changelog
+# 更新日志
+
+## 1.1.12 - 2026-02-24
+- 文档：更新 README（补充更准确的本地启动与 API Key 配置方式）。
+- 文档：更新日志统一使用中文描述。
 
 ## 1.1.11 - 2026-02-24
 - 设定集：右上角改为「富文本编辑」按钮，直接返回写作界面（替代 ✕ 关闭）。
@@ -14,25 +18,25 @@
 - 设定集：左侧侧栏支持拖拽调整宽度（本地记忆）。
 
 ## 1.1.7 - 2026-02-24
-- Settings: center Preferences content and improve layout consistency (writing-mode cards no longer stretch awkwardly).
-- Settings: add Focus Mode toggle to Preferences (left-side Settings entry point).
-- Editor: remove bottom status bar Focus/Mode switches (use Settings instead).
+- 设定集：偏好设置内容居中，布局更协调（写作模式卡片不再被拉伸）。
+- 设定集：偏好设置新增专注模式开关（从左侧设置进入）。
+- 编辑器：移除底部状态栏的专注/写作模式切换（统一在设置中操作）。
 
 ## 1.1.6 - 2026-02-24
-- Focus mode: one-click distraction-free writing (hide sidebars + widen editor; best-effort browser fullscreen).
+- 专注模式：一键进入无干扰写作（隐藏侧栏 + 加宽编辑区；尽力触发浏览器全屏）。
 
 ## 1.1.5 - 2026-02-24
-- Editor: add one-click writing mode switch in the bottom status bar.
+- 编辑器：底部状态栏新增一键切换写作模式。
 
 ## 1.1.4 - 2026-02-24
-- Settings: make the settings panel full-screen for easier editing.
+- 设定集：设定集管理改为全屏展示，便于编辑。
 
 ## 1.1.3 - 2026-02-24
-- Settings: allow adding and managing custom character roles in the basic info section.
+- 设定集：基础信息支持添加与管理自定义角色标签（如：男二/师父/宿敌）。
 
 ## 1.1.2 - 2026-02-24
-- Settings: refine AI auto-fill prompt to avoid self-referential "protagonist" relationships and prefer explicit character names.
+- 设定集：优化 AI 智能填写提示词，避免出现“主角与主角”的自指关系，优先使用明确人名。
 
 ## 1.1.1 - 2026-02-24
-- Settings: debounce settings field persistence to prevent dropped keystrokes while typing.
-- Settings: wire AI auto-fill buttons to generate field content using the configured AI provider.
+- 设定集：设定字段保存增加防抖，避免输入时“掉字”。
+- 设定集：AI 智能填写按钮接入实际生成逻辑，使用当前配置的 AI 供应商生成字段内容。

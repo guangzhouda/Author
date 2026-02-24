@@ -96,10 +96,11 @@ cd author
 # Install dependencies
 npm install
 
-# Configure environment variables (optional)
-cp .env.example .env.local
-# Edit .env.local with your API keys
-# You can also configure them in the app's Settings panel
+# Configure API keys (optional)
+# Recommended: run the app, open Settings → API Config, and paste your key
+# Or create `.env.local` manually and set server-side env vars (useful for deployment):
+#   ZHIPU_API_KEY=...
+#   GEMINI_API_KEY=...
 ```
 
 ### Development Server
@@ -184,4 +185,3 @@ This project is licensed under [AGPL-3.0](LICENSE).
 - [Next.js](https://nextjs.org/) — React full-stack framework
 - [Zustand](https://zustand-demo.pmnd.rs/) — State management
 - [KaTeX](https://katex.org/) — Math rendering
-# Author
