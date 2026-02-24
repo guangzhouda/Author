@@ -263,7 +263,7 @@ export default function SettingsPanel() {
         <div className="settings-panel-overlay" onClick={onClose}>
             <div className="settings-panel-container glass-panel" onClick={e => e.stopPropagation()}>
                 {/* 头部 */}
-                <div className="settings-header" style={{ background: 'transparent' }}>
+                <div className="settings-header">
                     <h2>
                         ⚙️ {t('settings.title')}
                         <span className="subtitle">— {t('settings.subtitle')}</span>
@@ -291,17 +291,19 @@ export default function SettingsPanel() {
 
                 {/* 内容区 */}
                 {activeTab === 'apiConfig' ? (
-                    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-                        <ApiConfigForm data={settings.apiConfig} onChange={data => handleSettingsSave('apiConfig', data)} />
+                    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px', display: 'flex', justifyContent: 'center' }}>
+                        <div style={{ width: '100%', maxWidth: 920 }}>
+                            <ApiConfigForm data={settings.apiConfig} onChange={data => handleSettingsSave('apiConfig', data)} />
+                        </div>
                     </div>
                 ) : activeTab === 'preferences' ? (
-                    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+                    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         <PreferencesForm />
                     </div>
                 ) : (
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         {/* 写作模式选择器 */}
-                        <div style={{ display: 'flex', gap: 10, padding: '14px 24px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, padding: '14px 24px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
                             {Object.values(WRITING_MODES).map(m => (
                                 <button
                                     key={m.key}
@@ -456,14 +458,83 @@ const PROVIDERS = [
 ];
 
 function PreferencesForm() {
-    const { language, setLanguage, visualTheme, setVisualTheme } = useAppStore();
+    const { language, setLanguage, visualTheme, setVisualTheme, focusMode, setFocusMode } = useAppStore();
     const { t } = useI18n();
 
+    const requestFullscreen = () => {
+        const el = document.documentElement;
+        const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (!fn) return;
+        return fn.call(el);
+    };
+
+    const exitFullscreen = () => {
+        const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (!fn) return;
+        return fn.call(document);
+    };
+
+    const handleToggleFocusMode = () => {
+        const next = !focusMode;
+        setFocusMode(next);
+
+        // Best-effort browser fullscreen; the in-app focus layout still works if fullscreen is blocked.
+        try {
+            const ret = next ? requestFullscreen() : exitFullscreen();
+            if (ret && typeof ret.catch === 'function') ret.catch(() => { });
+        } catch { /* ignore */ }
+    };
+
     return (
-        <div style={{ maxWidth: 640 }}>
+        <div style={{ width: '100%', maxWidth: 720 }}>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
                 {t('preferences.intro')}
             </p>
+
+            <div style={{ marginBottom: 28 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                    {t('preferences.focusLabel')}
+                </label>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 14,
+                        padding: '14px 16px',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 'var(--radius-lg)',
+                        background: 'var(--bg-primary)',
+                        boxShadow: 'var(--shadow-sm)',
+                    }}
+                >
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                            {t('preferences.focusTitle')}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            {t('preferences.focusDesc')}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: 'var(--radius-full)',
+                            borderColor: focusMode ? 'var(--accent)' : 'var(--border-light)',
+                            background: focusMode ? 'var(--accent-light)' : 'var(--bg-hover)',
+                            color: focusMode ? 'var(--accent)' : 'var(--text-secondary)',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                        }}
+                        onClick={handleToggleFocusMode}
+                        title={focusMode ? t('preferences.focusExit') : t('preferences.focusEnter')}
+                    >
+                        {focusMode ? t('preferences.focusExit') : t('preferences.focusEnter')}
+                    </button>
+                </div>
+            </div>
 
             <div style={{ marginBottom: 28 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('preferences.langLabel')}</label>

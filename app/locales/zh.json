@@ -374,6 +374,11 @@
     },
     "preferences": {
         "intro": "在这里可以随时更改应用程序的语言和视觉主题偏好。所有的更改都会实时生效并保存在本地。",
+        "focusLabel": "写作界面",
+        "focusTitle": "专注模式",
+        "focusDesc": "隐藏左右侧栏并加宽编辑区（会尝试进入浏览器全屏）",
+        "focusEnter": "开启",
+        "focusExit": "关闭",
         "langLabel": "界面语言 (Language)",
         "themeLabel": "视觉主题 (Theme)",
         "themeWarm": "经典纸张 (Warm Classic)",

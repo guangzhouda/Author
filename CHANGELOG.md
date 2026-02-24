@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.7 - 2026-02-24
+- Settings: center Preferences content and improve layout consistency (writing-mode cards no longer stretch awkwardly).
+- Settings: add Focus Mode toggle to Preferences (left-side Settings entry point).
+- Editor: remove bottom status bar Focus/Mode switches (use Settings instead).
+
 ## 1.1.6 - 2026-02-24
 - Focus mode: one-click distraction-free writing (hide sidebars + widen editor; best-effort browser fullscreen).
 

@@ -374,6 +374,11 @@
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",
+    "focusLabel": "Writing UI",
+    "focusTitle": "Focus Mode",
+    "focusDesc": "Hide sidebars and widen the editor (will try to enter browser fullscreen).",
+    "focusEnter": "Enable",
+    "focusExit": "Disable",
     "langLabel": "Interface Language",
     "themeLabel": "Visual Theme",
     "themeWarm": "Warm Classic",
