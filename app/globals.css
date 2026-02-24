@@ -368,6 +368,28 @@ body {
   flex-wrap: wrap;
 }
 
+.editor-toolbar-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-toolbar-panel {
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  padding: 10px 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.editor-toolbar-panel-inner {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .toolbar-group {
   display: flex;
   align-items: center;

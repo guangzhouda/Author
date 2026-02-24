@@ -940,6 +940,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
     useEffect(() => {
         const handler = (e) => {
             if (e.target.closest('.toolbar-dropdown-wrap')) return;
+            if (e.target.closest('.editor-toolbar-panel')) return;
             closeAll();
         };
         document.addEventListener('click', handler);
@@ -952,7 +953,8 @@ function EditorToolbar({ editor, margins, setMargins }) {
     const currentHighlight = editor.getAttributes('highlight').color || '';
 
     return (
-        <div className="editor-toolbar" onMouseDown={e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }}>
+        <div className="editor-toolbar-wrap">
+            <div className="editor-toolbar" onMouseDown={e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }}>
             {/* 撤销/重做 */}
             <div className="toolbar-group">
                 <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="撤销 (Ctrl+Z)">↩</button>
@@ -1086,31 +1088,6 @@ function EditorToolbar({ editor, margins, setMargins }) {
                 >
                     Aa <span className="dropdown-arrow">▾</span>
                 </button>
-                {showTypeset && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 120 }}>
-                        <div className="typeset-row">
-                            <label>字号</label>
-                            <input
-                                type="range" min="14" max="24" step="1"
-                                value={fontSize}
-                                onChange={e => setFontSize(Number(e.target.value))}
-                            />
-                            <span className="typeset-value">{fontSize}px</span>
-                        </div>
-                        <div className="typeset-row">
-                            <label>行距</label>
-                            <input
-                                type="range" min="1.4" max="2.6" step="0.1"
-                                value={lineHeight}
-                                onChange={e => setLineHeight(Number(e.target.value))}
-                            />
-                            <span className="typeset-value">{lineHeight.toFixed(1)}</span>
-                        </div>
-                        <button className="typeset-reset" onClick={() => { setFontSize(17); setLineHeight(1.9); }}>
-                            恢复默认
-                        </button>
-                    </div>
-                )}
             </div>
 
             {/* 📄 页面边距 */}
@@ -1123,31 +1100,6 @@ function EditorToolbar({ editor, margins, setMargins }) {
                 >
                     📄 <span className="dropdown-arrow">▾</span>
                 </button>
-                {showMargins && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 120 }}>
-                        <div className="typeset-row">
-                            <label>上下</label>
-                            <input
-                                type="range" min="40" max="160" step="8"
-                                value={margins.y}
-                                onChange={e => setMargins(prev => ({ ...prev, y: Number(e.target.value) }))}
-                            />
-                            <span className="typeset-value">{margins.y}px</span>
-                        </div>
-                        <div className="typeset-row">
-                            <label>左右</label>
-                            <input
-                                type="range" min="40" max="160" step="8"
-                                value={margins.x}
-                                onChange={e => setMargins(prev => ({ ...prev, x: Number(e.target.value) }))}
-                            />
-                            <span className="typeset-value">{margins.x}px</span>
-                        </div>
-                        <button className="typeset-reset" onClick={() => setMargins({ x: 96, y: 96 })}>
-                            恢复默认
-                        </button>
-                    </div>
-                )}
             </div>
 
             <div className="toolbar-divider" />
@@ -1167,6 +1119,66 @@ function EditorToolbar({ editor, margins, setMargins }) {
                 <button className="toolbar-btn" onClick={() => editor.chain().focus().setHorizontalRule().run()} title="分割线">——</button>
             </div>
         </div>
+
+        {/* 排版/页面设置面板（不再浮层遮挡页面） */}
+        {(showTypeset || showMargins) && (
+            <div className="editor-toolbar-panel" onClick={e => e.stopPropagation()}>
+                <div className="editor-toolbar-panel-inner">
+                    {showTypeset && (
+                        <>
+                            <div className="typeset-row" style={{ marginBottom: 0 }}>
+                                <label>字号</label>
+                                <input
+                                    type="range" min="14" max="24" step="1"
+                                    value={fontSize}
+                                    onChange={e => setFontSize(Number(e.target.value))}
+                                />
+                                <span className="typeset-value">{fontSize}px</span>
+                            </div>
+                            <div className="typeset-row" style={{ marginBottom: 0 }}>
+                                <label>行距</label>
+                                <input
+                                    type="range" min="1.4" max="2.6" step="0.1"
+                                    value={lineHeight}
+                                    onChange={e => setLineHeight(Number(e.target.value))}
+                                />
+                                <span className="typeset-value">{lineHeight.toFixed(1)}</span>
+                            </div>
+                            <button className="typeset-reset" onClick={() => { setFontSize(17); setLineHeight(1.9); }}>
+                                恢复默认
+                            </button>
+                        </>
+                    )}
+
+                    {showMargins && (
+                        <>
+                            <div className="typeset-row" style={{ marginBottom: 0 }}>
+                                <label>上下</label>
+                                <input
+                                    type="range" min="40" max="160" step="8"
+                                    value={margins.y}
+                                    onChange={e => setMargins(prev => ({ ...prev, y: Number(e.target.value) }))}
+                                />
+                                <span className="typeset-value">{margins.y}px</span>
+                            </div>
+                            <div className="typeset-row" style={{ marginBottom: 0 }}>
+                                <label>左右</label>
+                                <input
+                                    type="range" min="40" max="160" step="8"
+                                    value={margins.x}
+                                    onChange={e => setMargins(prev => ({ ...prev, x: Number(e.target.value) }))}
+                                />
+                                <span className="typeset-value">{margins.x}px</span>
+                            </div>
+                            <button className="typeset-reset" onClick={() => setMargins({ x: 96, y: 96 })}>
+                                恢复默认
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        )}
+    </div>
     );
 }
 
