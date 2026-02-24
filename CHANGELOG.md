@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.4 - 2026-02-24
+- Settings: make the settings panel full-screen for easier editing.
+
 ## 1.1.3 - 2026-02-24
 - Settings: allow adding and managing custom character roles in the basic info section.
 

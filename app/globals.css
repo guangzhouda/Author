@@ -1739,28 +1739,26 @@ body {
 .settings-panel-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--bg-primary);
   z-index: 1000;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   animation: fadeIn 0.2s ease;
 }
 
 .settings-panel-container {
   background: var(--bg-card);
-  border-radius: 16px;
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
-  width: 94%;
-  max-width: 1120px;
-  max-height: 88vh;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
   display: flex;
   flex-direction: column;
-  animation: settingsSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  animation: settingsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
