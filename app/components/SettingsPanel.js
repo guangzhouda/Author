@@ -65,6 +65,7 @@ export default function SettingsPanel() {
     });
     const pendingSaveRef = useRef(new Map());
     const pendingUpdatesRef = useRef(new Map());
+    const importWorldbookInputRef = useRef(null);
 
     const flushPendingSaves = () => {
         pendingSaveRef.current.forEach((timeoutId, id) => {
@@ -233,6 +234,128 @@ export default function SettingsPanel() {
         }
     };
 
+    const handleImportWorldbook = async (file) => {
+        if (!file) return;
+        try {
+            flushPendingSaves();
+
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            if (!data || data._app !== 'Author' || data._type !== 'worldbook') {
+                showToast?.(t('settings.importWorldbookInvalid'), 'error');
+                return;
+            }
+            if (!Array.isArray(data.nodes) || data.nodes.length === 0) {
+                showToast?.(t('settings.importWorldbookInvalid'), 'error');
+                return;
+            }
+
+            const importedNodes = data.nodes;
+            const oldWorkNode = importedNodes.find(n => n && n.type === 'work') || null;
+            const oldWorkId = data.activeWorkId || oldWorkNode?.id || null;
+            if (!oldWorkId) {
+                showToast?.(t('settings.importWorldbookInvalid'), 'error');
+                return;
+            }
+
+            const baseName = oldWorkNode?.name || data.work?.name || t('settings.importWorldbookDefaultName');
+            const importName = `${sanitizeFileName(baseName)}（${t('settings.importWorldbookSuffix')}）`;
+            const { workNode, subNodes } = createWorkNode(importName);
+
+            // Preserve a few visual fields if present in the exported work node.
+            if (oldWorkNode?.icon) workNode.icon = oldWorkNode.icon;
+            if (oldWorkNode?.collapsed !== undefined) workNode.collapsed = oldWorkNode.collapsed;
+
+            const idMap = new Map();
+            idMap.set(oldWorkId, workNode.id);
+
+            const importedTopLevel = importedNodes.filter(n => n && n.parentId === oldWorkId);
+            const mappedTopLevelNewIds = new Set();
+
+            // Map (and patch) standard top-level category nodes by category+type.
+            for (const sub of subNodes) {
+                const match = importedTopLevel.find(n => n.category === sub.category && n.type === sub.type);
+                if (!match) continue;
+                idMap.set(match.id, sub.id);
+                mappedTopLevelNewIds.add(sub.id);
+
+                // Keep user-customized naming/icon/collapsed/enabled where possible.
+                if (match.name) sub.name = match.name;
+                if (match.icon) sub.icon = match.icon;
+                if (match.collapsed !== undefined) sub.collapsed = match.collapsed;
+                if (match.enabled !== undefined) sub.enabled = match.enabled;
+                if (match.content !== undefined) sub.content = match.content;
+            }
+
+            const generateImportId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+            for (const n of importedNodes) {
+                if (!n || !n.id) continue;
+                if (idMap.has(n.id)) continue;
+                idMap.set(n.id, generateImportId());
+            }
+
+            const nowIso = new Date().toISOString();
+            const clones = [];
+            for (const n of importedNodes) {
+                if (!n || !n.id) continue;
+                if (n.id === oldWorkId) continue; // replaced by new work node
+
+                const newId = idMap.get(n.id);
+                if (mappedTopLevelNewIds.has(newId)) {
+                    // This is a mapped top-level category node — already created by createWorkNode().
+                    continue;
+                }
+
+                let newParentId = n.parentId ? idMap.get(n.parentId) : workNode.id;
+                if (!newParentId) newParentId = workNode.id;
+
+                const clone = {
+                    ...n,
+                    id: newId,
+                    parentId: newParentId,
+                    createdAt: n.createdAt || nowIso,
+                    updatedAt: n.updatedAt || nowIso,
+                };
+
+                // Avoid importing a nested "work" node (should never happen in our export).
+                if (clone.type === 'work') clone.type = 'folder';
+
+                clones.push(clone);
+            }
+
+            const updatedNodes = [...nodes, workNode, ...subNodes, ...clones];
+            await saveSettingsNodes(updatedNodes);
+            setNodes(updatedNodes);
+
+            // Switch to the imported project.
+            setActiveWorkIdState(workNode.id);
+            setActiveWorkId(workNode.id);
+            setSelectedNodeId(null);
+
+            // Import non-sensitive global settings (API config is intentionally excluded).
+            const nextSettings = { ...getProjectSettings() };
+            if (data.writingMode && WRITING_MODES[data.writingMode]) {
+                setWritingModeState(data.writingMode);
+                setWritingMode(data.writingMode);
+                nextSettings.writingMode = data.writingMode;
+            }
+            if (data.bookInfo && typeof data.bookInfo === 'object') {
+                nextSettings.bookInfo = data.bookInfo;
+            }
+            if (Array.isArray(data.customRoles)) {
+                nextSettings.customRoles = data.customRoles;
+            }
+            saveProjectSettings(nextSettings);
+            setSettings(nextSettings);
+
+            showToast?.(t('settings.importedWorldbook'), 'success');
+        } catch (err) {
+            console.error('导入设定集失败:', err);
+            showToast?.(t('settings.importWorldbookFailed'), 'error');
+        }
+    };
+
     if (!open || !settings) return null;
 
     const handleSettingsSave = (section, data) => {
@@ -333,6 +456,26 @@ export default function SettingsPanel() {
                         >
                             ⬇️ {t('settings.exportWorldbook')}
                         </button>
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
+                            onClick={() => importWorldbookInputRef.current?.click()}
+                            title={t('settings.importWorldbookTip')}
+                        >
+                            ⬆️ {t('settings.importWorldbook')}
+                        </button>
+                        <input
+                            ref={importWorldbookInputRef}
+                            type="file"
+                            accept=".json,application/json"
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                await handleImportWorldbook(file);
+                                e.target.value = '';
+                            }}
+                        />
                         <button
                             className="btn btn-primary btn-sm"
                             style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
