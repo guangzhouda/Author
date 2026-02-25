@@ -54,6 +54,8 @@ export default function SettingsPanel() {
     const [showNewWorkInput, setShowNewWorkInput] = useState(false);
     const [newWorkName, setNewWorkName] = useState('');
     const { t } = useI18n();
+    const [renamingWorkId, setRenamingWorkId] = useState(null);
+    const [renamingWorkName, setRenamingWorkName] = useState('');
 
     const [expandedCategory, setExpandedCategory] = useState(null);
     const [navWidth, setNavWidth] = useState(() => {
@@ -149,6 +151,23 @@ export default function SettingsPanel() {
         setActiveWorkIdState(workId);
         setActiveWorkId(workId);
         setSelectedNodeId(null);
+    };
+
+    const startRenameWork = (workId) => {
+        const w = nodes.find(n => n.id === workId);
+        if (!w) return;
+        setRenamingWorkId(workId);
+        setRenamingWorkName(w.name || '');
+    };
+
+    const commitRenameWork = async () => {
+        if (!renamingWorkId) return;
+        const nextName = renamingWorkName.trim();
+        const current = nodes.find(n => n.id === renamingWorkId);
+        setRenamingWorkId(null);
+        if (!nextName) return;
+        if (current?.name === nextName) return;
+        await handleRenameNode(renamingWorkId, nextName);
     };
 
     const handleCreateWork = async () => {
@@ -543,17 +562,50 @@ export default function SettingsPanel() {
                             <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {works.map(w => (
                                     <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                                        <button
-                                            style={{
-                                                padding: '5px 12px', border: activeWorkId === w.id ? '2px solid var(--cat-work)' : '1px solid var(--border-light)',
-                                                borderRadius: 'var(--radius-sm)', background: activeWorkId === w.id ? 'var(--cat-work-bg)' : 'var(--bg-secondary)',
-                                                cursor: 'pointer', fontSize: 12, fontWeight: activeWorkId === w.id ? 600 : 400,
-                                                color: activeWorkId === w.id ? 'var(--cat-work)' : 'var(--text-primary)', transition: 'all 0.15s',
-                                            }}
-                                            onClick={() => handleSwitchWork(w.id)}
-                                        >
-                                            {w.name}
-                                        </button>
+                                        {renamingWorkId === w.id ? (
+                                            <input
+                                                value={renamingWorkName}
+                                                onChange={(e) => setRenamingWorkName(e.target.value)}
+                                                onBlur={() => { void commitRenameWork(); }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') { e.currentTarget.blur(); }
+                                                    if (e.key === 'Escape') { setRenamingWorkId(null); }
+                                                }}
+                                                autoFocus
+                                                style={{
+                                                    padding: '5px 10px',
+                                                    border: '2px solid var(--cat-work)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: 12,
+                                                    outline: 'none',
+                                                    minWidth: 140,
+                                                }}
+                                                placeholder={t('settings.workNamePlaceholder')}
+                                            />
+                                        ) : (
+                                            <button
+                                                style={{
+                                                    padding: '5px 12px', border: activeWorkId === w.id ? '2px solid var(--cat-work)' : '1px solid var(--border-light)',
+                                                    borderRadius: 'var(--radius-sm)', background: activeWorkId === w.id ? 'var(--cat-work-bg)' : 'var(--bg-secondary)',
+                                                    cursor: 'pointer', fontSize: 12, fontWeight: activeWorkId === w.id ? 600 : 400,
+                                                    color: activeWorkId === w.id ? 'var(--cat-work)' : 'var(--text-primary)', transition: 'all 0.15s',
+                                                }}
+                                                onClick={() => handleSwitchWork(w.id)}
+                                                onDoubleClick={() => startRenameWork(w.id)}
+                                                title={t('common.rename') + ' / ' + t('settings.workLabel') + w.name}
+                                            >
+                                                {w.name}
+                                            </button>
+                                        )}
+                                        {renamingWorkId !== w.id && (
+                                            <button
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', lineHeight: 1, opacity: 0.65 }}
+                                                onClick={() => startRenameWork(w.id)}
+                                                title={t('common.rename') + ' ' + w.name}
+                                            >✏</button>
+                                        )}
                                         {works.length > 1 && (
                                             <button
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', lineHeight: 1, opacity: 0.6 }}
