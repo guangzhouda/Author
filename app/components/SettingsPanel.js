@@ -41,6 +41,7 @@ export default function SettingsPanel() {
         incrementSettingsVersion,
         jumpToNodeId,
         setJumpToNodeId,
+        showToast,
     } = useAppStore();
 
     const [settings, setSettings] = useState(null);
@@ -184,6 +185,54 @@ export default function SettingsPanel() {
         setSelectedNodeId(null);
     };
 
+    const sanitizeFileName = (name) => {
+        return String(name || '')
+            .replace(/[\\/:*?"<>|]/g, '_')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 60) || '未命名';
+    };
+
+    const handleExportWorldbook = () => {
+        try {
+            const workNode = activeWorkId ? nodes.find(n => n.id === activeWorkId) : null;
+            const workName = sanitizeFileName(workNode?.name || '设定集');
+
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+            const fileName = `Author_设定集_${workName}_${dateStr}.json`;
+
+            // NOTE: This export intentionally excludes API keys.
+            const exportData = {
+                _app: 'Author',
+                _type: 'worldbook',
+                _version: 1,
+                _exportedAt: new Date().toISOString(),
+                work: workNode ? { id: workNode.id, name: workNode.name } : null,
+                activeWorkId: activeWorkId || null,
+                writingMode: writingMode || null,
+                bookInfo: settings?.bookInfo || {},
+                customRoles: settings?.customRoles || [],
+                nodes: visibleNodes,
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast?.(t('settings.exportedWorldbook'), 'success');
+        } catch (err) {
+            console.error('导出设定集失败:', err);
+            showToast?.(t('settings.exportWorldbookFailed'), 'error');
+        }
+    };
+
     if (!open || !settings) return null;
 
     const handleSettingsSave = (section, data) => {
@@ -275,14 +324,24 @@ export default function SettingsPanel() {
                         ⚙️ {t('settings.title')}
                         <span className="subtitle">— {t('settings.subtitle')}</span>
                     </h2>
-                    <button
-                        className="btn btn-primary btn-sm"
-                        style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
-                        onClick={onClose}
-                        title="进入富文本编辑"
-                    >
-                        📝 富文本编辑
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
+                            onClick={handleExportWorldbook}
+                            title={t('settings.exportWorldbookTip')}
+                        >
+                            ⬇️ {t('settings.exportWorldbook')}
+                        </button>
+                        <button
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
+                            onClick={onClose}
+                            title="进入富文本编辑"
+                        >
+                            📝 富文本编辑
+                        </button>
+                    </div>
                 </div>
 
                 {/* Tab 导航 */}
