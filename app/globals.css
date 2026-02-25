@@ -1322,6 +1322,15 @@ body {
 
 
 /* 排版设置浮层 */
+.typeset-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(2px);
+  z-index: 110;
+  animation: fadeIn 0.12s ease;
+}
+
 .typeset-popover {
   background: var(--bg-card);
   border: 1px solid var(--border-light);

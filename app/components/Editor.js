@@ -953,6 +953,16 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
     return (
         <div className="editor-toolbar-wrap">
+            {(showTypeset || showMargins) && (
+                <div
+                    className="typeset-backdrop"
+                    onMouseDown={(e) => {
+                        // Close on backdrop click without stealing focus/selection.
+                        e.preventDefault();
+                        closeAll();
+                    }}
+                />
+            )}
             <div className="editor-toolbar" onMouseDown={e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }}>
             {/* 撤销/重做 */}
             <div className="toolbar-group">
