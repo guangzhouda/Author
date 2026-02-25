@@ -1323,10 +1323,6 @@ body {
 
 /* 排版设置浮层 */
 .typeset-popover {
-  position: absolute;
-  bottom: 100%;
-  right: 16px;
-  margin-bottom: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
