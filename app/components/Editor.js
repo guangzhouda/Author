@@ -33,6 +33,16 @@ const AI_MODES = [
 const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
 const PAGE_GAP = 24;      // 页间灰色间隙
 
+function countNovelWords(text) {
+    if (!text) return 0;
+    // "字数"：默认不统计空白/标点/符号/控制字符（更贴近中文写作平台的口径）
+    // Note: Array.from counts Unicode code points (avoids surrogate pair double-counting).
+    const cleaned = text
+        .replace(/\s+/g, '')
+        .replace(/[\p{P}\p{S}\p{C}]+/gu, '');
+    return Array.from(cleaned).length;
+}
+
 
 const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }, ref) {
     const clipPathId = useId();
@@ -113,7 +123,7 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
                 onUpdate?.({
                     html,
                     text,
-                    wordCount: text.replace(/\s/g, '').length,
+                    wordCount: countNovelWords(text),
                 });
             }, 500);
         },
@@ -1217,7 +1227,7 @@ function StatusBar({ editor, pageCount }) {
 
     const characterCount = editor.storage.characterCount;
     const chars = characterCount?.characters() ?? 0;
-    const words = editor.getText().replace(/\s/g, '').length;
+    const words = countNovelWords(editor.getText());
 
     return (
         <div className="status-bar">
