@@ -45,9 +45,9 @@ export default function Sidebar() {
     }, [chapters, t]);
 
     // 创建新章节 — 一键创建并进入重命名模式
-    const handleCreateChapter = useCallback(() => {
+    const handleCreateChapter = useCallback(async () => {
         const title = getNextChapterTitle();
-        const ch = createChapter(title);
+        const ch = await createChapter(title);
         addChapter(ch);
         setActiveChapterId(ch.id);
         // 立即进入重命名模式，方便用户修改标题
@@ -57,13 +57,13 @@ export default function Sidebar() {
     }, [getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
 
     // 删除章节
-    const handleDeleteChapter = useCallback((id) => {
+    const handleDeleteChapter = useCallback(async (id) => {
         if (chapters.length <= 1) {
             showToast(t('sidebar.alertRetainOne'), 'error');
             return;
         }
         const ch = chapters.find(c => c.id === id);
-        const remaining = deleteChapter(id);
+        const remaining = await deleteChapter(id);
         setChapters(remaining);
         if (activeChapterId === id) {
             setActiveChapterId(remaining[0]?.id || null);
@@ -73,10 +73,10 @@ export default function Sidebar() {
     }, [chapters, activeChapterId, showToast, setChapters, setActiveChapterId, t]);
 
     // 重命名章节
-    const handleRename = useCallback((id) => {
+    const handleRename = useCallback(async (id) => {
         const title = renameTitle.trim();
         if (!title) return;
-        const updated = updateChapter(id, { title });
+        await updateChapter(id, { title });
         updateChapterStore(id, { title });
         setRenameId(null);
         setRenameTitle('');
