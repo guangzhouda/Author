@@ -1,9 +1,16 @@
 /**
- * 项目导出/导入 — 将所有 localStorage 数据打包为 JSON 文件
- * 支持：章节、设定集、API 配置、聊天会话
+ * 项目导出/导入 — 将数据打包为 JSON 文件（用于备份/迁移/回退）
+ *
+ * ⚠️ 注意：
+ * - 核心数据（章节、设定集、聊天会话）已迁移到 IndexedDB，本文件应以 IndexedDB 为准。
+ * - 出于安全考虑，导出/导入默认不会包含 API Key（需要用户在设置里重新填写）。
  */
 
-const PROJECT_FILE_VERSION = 1;
+import { getChapters, saveChapters, getChapterSummary, saveChapterSummary } from './storage';
+import { getSettingsNodes, saveSettingsNodes, getActiveWorkId, setActiveWorkId, getProjectSettings, saveProjectSettings } from './settings';
+import { loadSessionStore, saveSessionStore } from './chat-sessions';
+
+const PROJECT_FILE_VERSION = 2;
 
 // 需要导出的所有 localStorage keys
 const STORAGE_KEYS = {
@@ -17,10 +24,22 @@ const STORAGE_KEYS = {
 // 章节摘要前缀
 const SUMMARY_PREFIX = 'author-chapter-summary-';
 
+function stripSecretsFromSettings(settings) {
+    if (!settings || typeof settings !== 'object') return settings;
+    const safe = { ...settings };
+    if (safe.apiConfig && typeof safe.apiConfig === 'object') {
+        safe.apiConfig = { ...safe.apiConfig };
+        // Do not export/import secrets.
+        delete safe.apiConfig.apiKey;
+        delete safe.apiConfig.embedApiKey;
+    }
+    return safe;
+}
+
 /**
  * 导出整个项目为 JSON 文件并下载
  */
-export function exportProject() {
+export async function exportProject() {
     if (typeof window === 'undefined') return;
 
     const data = {
@@ -29,25 +48,46 @@ export function exportProject() {
         _app: 'Author',
     };
 
-    // 收集所有主要数据
-    for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
-        try {
-            const raw = localStorage.getItem(storageKey);
-            data[key] = raw ? JSON.parse(raw) : null;
-        } catch {
-            data[key] = null;
-        }
+    // 核心数据：以 IndexedDB 为准（兼容旧版 localStorage 迁移逻辑由各模块内部处理）
+    try {
+        data.chapters = await getChapters();
+    } catch {
+        data.chapters = [];
+    }
+    try {
+        data.settingsNodes = await getSettingsNodes();
+    } catch {
+        data.settingsNodes = null;
+    }
+    try {
+        data.chatSessions = await loadSessionStore();
+    } catch {
+        data.chatSessions = { activeSessionId: null, sessions: [] };
     }
 
-    // 收集章节摘要
-    const summaries = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k?.startsWith(SUMMARY_PREFIX)) {
-            const chapterId = k.slice(SUMMARY_PREFIX.length);
-            summaries[chapterId] = localStorage.getItem(k);
-        }
+    // 项目设定（localStorage），去除 API Key
+    try {
+        data.settings = stripSecretsFromSettings(getProjectSettings());
+    } catch {
+        data.settings = null;
     }
+    try {
+        data.activeWork = getActiveWorkId();
+    } catch {
+        data.activeWork = null;
+    }
+
+    // 章节摘要：按章节 ID 逐个读取（避免遍历 IndexedDB key）
+    const summaries = {};
+    try {
+        const chapters = Array.isArray(data.chapters) ? data.chapters : [];
+        for (const ch of chapters) {
+            const sid = ch?.id;
+            if (!sid) continue;
+            const summary = await getChapterSummary(sid);
+            if (summary) summaries[sid] = summary;
+        }
+    } catch { }
     data.chapterSummaries = summaries;
 
     // 生成文件名
@@ -86,23 +126,42 @@ export async function importProject(file) {
             return { success: false, message: '文件格式不正确，不是 Author 存档文件' };
         }
 
-        // 恢复主要数据
-        for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
-            if (data[key] !== undefined && data[key] !== null) {
-                localStorage.setItem(storageKey, JSON.stringify(data[key]));
-            }
+        // 恢复章节（IndexedDB）
+        if (Array.isArray(data.chapters)) {
+            await saveChapters(data.chapters);
+        } else if (data.chapters === null && data._version === 1) {
+            // old export might not include chapters
         }
 
-        // 恢复章节摘要
+        // 恢复设定节点（IndexedDB）
+        if (Array.isArray(data.settingsNodes)) {
+            await saveSettingsNodes(data.settingsNodes);
+        }
+
+        // 恢复聊天会话（IndexedDB）
+        if (data.chatSessions && typeof data.chatSessions === 'object') {
+            await saveSessionStore(data.chatSessions);
+        }
+
+        // 恢复章节摘要（IndexedDB）
         if (data.chapterSummaries && typeof data.chapterSummaries === 'object') {
             for (const [chapterId, summary] of Object.entries(data.chapterSummaries)) {
                 if (summary) {
-                    localStorage.setItem(SUMMARY_PREFIX + chapterId, summary);
+                    await saveChapterSummary(chapterId, summary);
                 }
             }
         }
 
-        return { success: true, message: `成功导入存档（导出时间：${data._exportedAt || '未知'}）` };
+        // 恢复项目设定（localStorage），去除 API Key
+        if (data.settings && typeof data.settings === 'object') {
+            saveProjectSettings(stripSecretsFromSettings(data.settings));
+        }
+        if (typeof data.activeWork === 'string' && data.activeWork) {
+            setActiveWorkId(data.activeWork);
+        }
+
+        const extraNote = '（API Key 出于安全考虑不会随存档导入，请在设置中重新填写）';
+        return { success: true, message: `成功导入存档（导出时间：${data._exportedAt || '未知'}）${extraNote}` };
     } catch (err) {
         return { success: false, message: `导入失败：${err.message}` };
     }
