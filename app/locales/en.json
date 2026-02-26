@@ -200,6 +200,8 @@
     "emptyArchiveHint": "AI generated content will be archived here automatically",
     "insertEditor": "↓ Insert into Editor",
     "copy": "📋 Copy",
+    "toastCopied": "Copied to clipboard",
+    "toastCopyFailed": "Copy failed",
     "tokenUsage": "Token Usage",
     "searchContext": "🔍 Search items...",
     "emptyContextIcon": "📚",

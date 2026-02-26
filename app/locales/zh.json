@@ -200,6 +200,8 @@
         "emptyArchiveHint": "AI 生成的内容会自动归档到这里",
         "insertEditor": "↓ 插入编辑器",
         "copy": "📋 复制",
+        "toastCopied": "已复制到剪贴板",
+        "toastCopyFailed": "复制失败",
         "tokenUsage": "Token 用量",
         "searchContext": "🔍 搜索条目…",
         "emptyContextIcon": "📚",

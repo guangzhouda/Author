@@ -35,6 +35,11 @@ function parseSettingsActions(content) {
     return { parts, actions };
 }
 
+function getPlainTextFromMessageContent(content) {
+    const { parts } = parseSettingsActions(content || '');
+    return parts.filter(p => typeof p === 'string').join('').trim();
+}
+
 // Removed static label maps in favor of i18n
 
 // ==================== AI 对话侧栏 ====================
@@ -57,6 +62,16 @@ export default function AiSidebar({ onInsertText }) {
             streamAbortRef.current.abort();
             streamAbortRef.current = null;
             showToast(t('page.toastStopped'), 'info');
+        }
+    }, [showToast, t]);
+
+    const handleCopyText = useCallback(async (text) => {
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast(t('aiSidebar.toastCopied'), 'success');
+        } catch {
+            showToast(t('aiSidebar.toastCopyFailed'), 'error');
         }
     }, [showToast, t]);
 
@@ -780,6 +795,7 @@ export default function AiSidebar({ onInsertText }) {
                             const hasVariants = msg.variants && msg.variants.length > 1;
                             const variantIdx = msg.activeVariant ?? 0;
                             const variantTotal = msg.variants?.length || 1;
+                            const actionText = msg.role === 'assistant' ? getPlainTextFromMessageContent(msg.content) : '';
 
                             return (
                                 <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -819,6 +835,22 @@ export default function AiSidebar({ onInsertText }) {
                                                     disabled={chatStreaming}
                                                 >{t('aiSidebar.btnRegenerate')}</button>
                                             )}
+                                            {msg.role === 'assistant' && (
+                                                <button
+                                                    className="btn-mini-icon"
+                                                    onClick={() => onInsertText?.(actionText)}
+                                                    disabled={!actionText}
+                                                    title={t('aiSidebar.insertEditor')}
+                                                >↓</button>
+                                            )}
+                                            {msg.role === 'assistant' && (
+                                                <button
+                                                    className="btn-mini-icon"
+                                                    onClick={() => handleCopyText(actionText)}
+                                                    disabled={!actionText}
+                                                    title={t('aiSidebar.copy')}
+                                                >📋</button>
+                                            )}
                                             <button
                                                 className="btn-mini-icon"
                                                 onClick={() => onBranch?.(msg.id)}
@@ -828,7 +860,7 @@ export default function AiSidebar({ onInsertText }) {
                                                 className="btn-mini-icon danger"
                                                 onClick={() => onDeleteMessage?.(msg.id)}
                                                 title={t('aiSidebar.delete')}
-                                            >{t('aiSidebar.clearChat')}</button>
+                                            >🗑</button>
                                         </div>
                                     </div>
 
