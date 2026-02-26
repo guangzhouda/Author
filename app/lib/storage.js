@@ -1,5 +1,6 @@
 // 本地存储工具 - 使用 IndexedDB 管理核心数据 (章节、摘要)
 import { get, set, update } from 'idb-keyval';
+import { countNovelWordsFromHtml } from './text-metrics';
 
 const STORAGE_KEY = 'author-chapters';
 
@@ -22,6 +23,13 @@ export async function getChapters() {
             } else {
                 chapters = [];
             }
+        }
+        // Ensure wordCount is consistent with current counting logic (without writing back).
+        if (Array.isArray(chapters)) {
+            chapters = chapters.map(ch => ({
+                ...ch,
+                wordCount: countNovelWordsFromHtml(ch?.content || ''),
+            }));
         }
         return chapters;
     } catch {
