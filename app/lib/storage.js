@@ -1,5 +1,5 @@
 // 本地存储工具 - 使用 IndexedDB 管理核心数据 (章节、摘要)
-import { get, set } from 'idb-keyval';
+import { get, set, update } from 'idb-keyval';
 
 const STORAGE_KEY = 'author-chapters';
 
@@ -37,7 +37,6 @@ export async function saveChapters(chapters) {
 
 // 创建新章节 (Async)
 export async function createChapter(title = '未命名章节') {
-    const chapters = await getChapters();
     const newChapter = {
         id: generateId(),
         title,
@@ -46,32 +45,59 @@ export async function createChapter(title = '未命名章节') {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
     };
-    chapters.push(newChapter);
-    await saveChapters(chapters);
+
+    // Atomic update to avoid concurrent writes overwriting each other.
+    await update(STORAGE_KEY, (chapters) => {
+        let arr = Array.isArray(chapters) ? chapters : null;
+        if (!arr) {
+            // Fallback: migrate from localStorage if this is the first write.
+            try {
+                const legacyData = localStorage.getItem(STORAGE_KEY);
+                arr = legacyData ? JSON.parse(legacyData) : [];
+            } catch {
+                arr = [];
+            }
+        }
+        return [...arr, newChapter];
+    });
     return newChapter;
 }
 
 // 更新章节 (Async)
 export async function updateChapter(id, updates) {
-    const chapters = await getChapters();
-    const index = chapters.findIndex(ch => ch.id === id);
-    if (index === -1) return null;
+    let updatedChapter = null;
 
-    chapters[index] = {
-        ...chapters[index],
-        ...updates,
-        updatedAt: new Date().toISOString(),
-    };
-    await saveChapters(chapters);
-    return chapters[index];
+    // Atomic update to avoid racing with other chapter updates (e.g. rename vs content autosave).
+    await update(STORAGE_KEY, (chapters) => {
+        const arr = Array.isArray(chapters) ? chapters : [];
+        const index = arr.findIndex(ch => ch.id === id);
+        if (index === -1) return arr;
+
+        const next = [...arr];
+        updatedChapter = {
+            ...next[index],
+            ...updates,
+            updatedAt: new Date().toISOString(),
+        };
+        next[index] = updatedChapter;
+        return next;
+    });
+
+    return updatedChapter;
 }
 
 // 删除章节 (Async)
 export async function deleteChapter(id) {
-    const chapters = await getChapters();
-    const newChapters = chapters.filter(ch => ch.id !== id);
-    await saveChapters(newChapters);
-    return newChapters;
+    let remaining = [];
+
+    // Atomic update to avoid concurrent writes overwriting deletes.
+    await update(STORAGE_KEY, (chapters) => {
+        const arr = Array.isArray(chapters) ? chapters : [];
+        remaining = arr.filter(ch => ch.id !== id);
+        return remaining;
+    });
+
+    return remaining;
 }
 
 // 获取单个章节 (Async)
