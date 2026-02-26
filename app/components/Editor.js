@@ -946,6 +946,15 @@ function EditorToolbar({ editor, margins, setMargins }) {
         return () => document.removeEventListener('click', handler);
     }, []);
 
+    // Close dropdowns/panels with Escape (especially helpful for the typeset popovers).
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') closeAll();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
+
     const currentFontFamily = editor.getAttributes('textStyle').fontFamily || '';
     const currentFontLabel = FONT_FAMILIES.find(f => f.value === currentFontFamily)?.label || '默认';
     const currentColor = editor.getAttributes('textStyle').color || '';
