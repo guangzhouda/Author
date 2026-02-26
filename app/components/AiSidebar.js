@@ -50,8 +50,18 @@ export default function AiSidebar({ onInsertText }) {
     } = useAppStore();
     const { t } = useI18n();
 
-    const onClose = useCallback(() => setAiSidebarOpen(false), [setAiSidebarOpen]);
-    const onOpenSettings = useCallback(() => { setAiSidebarOpen(false); setShowSettings(true); }, [setAiSidebarOpen, setShowSettings]);
+    // Streaming abort controller (Stop button)
+    const streamAbortRef = useRef(null);
+    const stopStreaming = useCallback(() => {
+        if (streamAbortRef.current) {
+            streamAbortRef.current.abort();
+            streamAbortRef.current = null;
+            showToast(t('page.toastStopped'), 'info');
+        }
+    }, [showToast, t]);
+
+    const onClose = useCallback(() => { stopStreaming(); setAiSidebarOpen(false); }, [stopStreaming, setAiSidebarOpen]);
+    const onOpenSettings = useCallback(() => { stopStreaming(); setAiSidebarOpen(false); setShowSettings(true); }, [stopStreaming, setAiSidebarOpen, setShowSettings]);
 
     // 派生状态
     const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
@@ -94,6 +104,9 @@ export default function AiSidebar({ onInsertText }) {
     const chatEndRef = useRef(null);
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
+
+    // Unmount safety
+    useEffect(() => () => { streamAbortRef.current?.abort(); }, []);
 
     // 新消息时只在用户已滚动到底部时才自动滚动（不劫持用户滚动）
     useEffect(() => {
@@ -145,46 +158,62 @@ export default function AiSidebar({ onInsertText }) {
     }, [slidingWindow, slidingWindowSize, chatHistory.length]);
 
     // --- 通用 SSE 流式读取，支持 text+thinking ---
-    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone) => {
-        const res = await fetch(apiEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens: 2000 }),
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-            const data = await res.json();
-            throw new Error(data.error || '请求失败');
-        }
-
-        const reader = res.body.getReader();
+    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal) => {
         const decoder = new TextDecoder();
         let buffer = '';
         let fullText = '';
         let fullThinking = '';
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const events = buffer.split('\n\n');
-            buffer = events.pop() || '';
-            let hasUpdate = false;
-            for (const event of events) {
-                const trimmed = event.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
-                        if (json.text) { fullText += json.text; hasUpdate = true; }
-                    } catch { }
-                }
+        try {
+            const res = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens: 2000 }),
+                signal,
+            });
+
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const data = await res.json();
+                throw new Error(data.error || '请求失败');
             }
-            if (hasUpdate) onUpdate(fullText, fullThinking);
+
+            if (!res.body) {
+                throw new Error('响应为空');
+            }
+
+            const reader = res.body.getReader();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+                let hasUpdate = false;
+                for (const event of events) {
+                    const trimmed = event.trim();
+                    if (!trimmed || trimmed === 'data: [DONE]') continue;
+                    if (trimmed.startsWith('data: ')) {
+                        try {
+                            const json = JSON.parse(trimmed.slice(6));
+                            if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
+                            if (json.text) { fullText += json.text; hasUpdate = true; }
+                        } catch { }
+                    }
+                }
+                if (hasUpdate) onUpdate(fullText, fullThinking);
+            }
+
+            onDone(fullText, fullThinking);
+        } catch (err) {
+            // Allow stopping streaming without showing an error bubble.
+            if (err?.name === 'AbortError') {
+                onDone(fullText, fullThinking);
+                return;
+            }
+            throw err;
         }
-        onDone(fullText, fullThinking);
     }, []);
 
     const onChatMessage = useCallback(async (text, selectedHistory) => {
@@ -204,6 +233,11 @@ export default function AiSidebar({ onInsertText }) {
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', timestamp: Date.now() };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
+
+            // Setup AbortController for Stop button.
+            streamAbortRef.current?.abort();
+            const controller = new AbortController();
+            streamAbortRef.current = controller;
 
             await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
                 (snapText, snapThinking) => {
@@ -229,14 +263,15 @@ export default function AiSidebar({ onInsertText }) {
                         return finalStore;
                     });
                 }
-            );
+            , controller.signal);
         } catch (err) {
             const errorMsg = { id: `msg-${Date.now()}-e`, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
             setSessionStore(prev => addMessage(prev, errorMsg));
         } finally {
             setChatStreaming(false);
+            streamAbortRef.current = null;
         }
-    }, [activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
+    }, [activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming, t]);
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
@@ -282,6 +317,11 @@ export default function AiSidebar({ onInsertText }) {
                 }),
             }));
 
+            // Setup AbortController for Stop button.
+            streamAbortRef.current?.abort();
+            const controller = new AbortController();
+            streamAbortRef.current = controller;
+
             await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
                 (snapText, snapThinking) => {
                     setSessionStore(prev => ({
@@ -300,7 +340,7 @@ export default function AiSidebar({ onInsertText }) {
                         return newStore;
                     });
                 }
-            );
+            , controller.signal);
         } catch (err) {
             setSessionStore(prev => ({
                 ...prev, sessions: prev.sessions.map(s => {
@@ -310,6 +350,7 @@ export default function AiSidebar({ onInsertText }) {
             }));
         } finally {
             setChatStreaming(false);
+            streamAbortRef.current = null;
         }
     }, [chatHistory, chatStreaming, activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
 
@@ -586,6 +627,13 @@ export default function AiSidebar({ onInsertText }) {
                         onClick={onNewSession}
                         title={t('aiSidebar.btnNewSession')}
                     >＋</button>
+                    {chatStreaming && (
+                        <button
+                            className="btn btn-ghost btn-icon btn-sm"
+                            onClick={stopStreaming}
+                            title={t('page.toastStopped')}
+                        >■</button>
+                    )}
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} title={t('aiSidebar.btnClose')}>✕</button>
                 </div>
             </div>
@@ -913,10 +961,11 @@ export default function AiSidebar({ onInsertText }) {
                         />
                         <button
                             className="chat-send-btn"
-                            onClick={handleSend}
-                            disabled={!inputText.trim() || chatStreaming}
+                            onClick={chatStreaming ? stopStreaming : handleSend}
+                            disabled={chatStreaming ? false : !inputText.trim()}
+                            title={chatStreaming ? t('page.toastStopped') : undefined}
                         >
-                            {chatStreaming ? '⏳' : '↑'}
+                            {chatStreaming ? '■' : '↑'}
                         </button>
                     </div>
                 </div>
