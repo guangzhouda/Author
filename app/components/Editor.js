@@ -23,6 +23,8 @@ import { useAppStore } from '../store/useAppStore';
 const AI_MODES = [
     { key: 'continue', label: '✦ 续写', desc: '从光标处自然续写', needsSelection: false },
     { key: 'rewrite', label: '✎ 润色', desc: '提升选中文字质量', needsSelection: true },
+    { key: 'typeset', label: '🧹 排版', desc: '中文标点/格式规范化（不改写）', needsSelection: true },
+    { key: 'proofread', label: '🔎 校对', desc: '检查错别字/标点/明显语病（不改写）', needsSelection: true },
     { key: 'expand', label: '⊕ 扩写', desc: '丰富细节与描写', needsSelection: true },
     { key: 'condense', label: '⊖ 精简', desc: '浓缩核心内容', needsSelection: true },
 ];
@@ -672,6 +674,23 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         ? AI_MODES
         : AI_MODES.filter(m => !m.needsSelection);
 
+    const inputPlaceholder = (() => {
+        switch (mode) {
+            case 'continue':
+                return '补充指示（可选），如：写一段打斗场景';
+            case 'typeset':
+                return '排版要求（可选），如：统一标点/引号/省略号';
+            case 'proofread':
+                return '校对要求（可选），如：重点检查人名/术语一致性';
+            case 'condense':
+                return '精简指示（可选），如：更利落，删掉重复信息';
+            case 'expand':
+                return '扩写指示（可选），如：增加心理活动与环境细节';
+            default:
+                return '改写指示（可选），如：更有诗意';
+        }
+    })();
+
     return (
         <div
             ref={popoverRef}
@@ -709,7 +728,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 <input
                     ref={inputRef}
                     className="inline-ai-input"
-                    placeholder={mode === 'continue' ? '补充指示（可选），如：写一段打斗场景' : '改写指示（可选），如：更有诗意'}
+                    placeholder={inputPlaceholder}
                     value={instruction}
                     onChange={e => setInstruction(e.target.value)}
                     onKeyDown={e => {

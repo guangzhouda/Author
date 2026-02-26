@@ -229,6 +229,8 @@
     "modes": {
       "continue": "Continue",
       "rewrite": "Rewrite",
+      "typeset": "Typeset",
+      "proofread": "Proofread",
       "expand": "Expand",
       "condense": "Condense",
       "dialogue": "Dialogue",

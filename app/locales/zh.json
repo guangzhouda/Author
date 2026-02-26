@@ -229,6 +229,8 @@
         "modes": {
             "continue": "续写",
             "rewrite": "改写",
+            "typeset": "排版",
+            "proofread": "校对",
             "expand": "扩写",
             "condense": "精简",
             "dialogue": "对话",

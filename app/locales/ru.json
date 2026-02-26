@@ -229,6 +229,8 @@
         "modes": {
             "continue": "Продолжить",
             "rewrite": "Переписать",
+            "typeset": "Верстка",
+            "proofread": "Корректура",
             "expand": "Расширить",
             "condense": "Сократить",
             "dialogue": "Диалог",
