@@ -203,20 +203,10 @@ export default function AiSidebar({ onInsertText }) {
     const inputRef = useRef(null);
 
     // Chat scroll helpers (jump to latest)
-    const [showJumpToBottom, setShowJumpToBottom] = useState(false);
     const scrollToBottom = useCallback((behavior = 'smooth') => {
         try {
             chatEndRef.current?.scrollIntoView({ behavior });
         } catch { /* ignore */ }
-    }, []);
-
-    const updateJumpToBottomVisibility = useCallback(() => {
-        const el = chatContainerRef.current;
-        if (!el) return;
-        const threshold = 80;
-        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-        const canScroll = el.scrollHeight > el.clientHeight + 50;
-        setShowJumpToBottom(canScroll && !nearBottom);
     }, []);
 
     // Unmount safety
@@ -234,8 +224,7 @@ export default function AiSidebar({ onInsertText }) {
         if (isNearBottom) {
             scrollToBottom('smooth');
         }
-        updateJumpToBottomVisibility();
-    }, [chatHistory.length, scrollToBottom, updateJumpToBottomVisibility]);
+    }, [chatHistory.length, scrollToBottom]);
 
     // 切到聊天 Tab 时聚焦输入框
     useEffect(() => {
@@ -244,10 +233,9 @@ export default function AiSidebar({ onInsertText }) {
             // Chat tab is conditionally rendered; ensure we start at the latest message.
             setTimeout(() => {
                 scrollToBottom('auto');
-                updateJumpToBottomVisibility();
             }, 0);
         }
-    }, [activeTab, open, activeSessionId, scrollToBottom, updateJumpToBottomVisibility]);
+    }, [activeTab, open, activeSessionId, scrollToBottom]);
 
     // When switching to Playbook tab, refresh its content.
     useEffect(() => {
@@ -984,6 +972,9 @@ export default function AiSidebar({ onInsertText }) {
                             >
                                 {t('aiSidebar.ace')}
                             </button>
+                            <button className="btn-mini" onClick={() => scrollToBottom('smooth')} title={t('aiSidebar.jumpToBottom')}>
+                                {t('aiSidebar.jumpToBottom')}
+                            </button>
                             <button className="btn-mini danger" onClick={handleClearChat} title={t('aiSidebar.clearChatTitle')}>
                                 {t('aiSidebar.clearChat')}
                             </button>
@@ -1007,8 +998,7 @@ export default function AiSidebar({ onInsertText }) {
                     )}
 
                     {/* 对话消息列表 */}
-                    <div className="chat-messages-wrap">
-                        <div className="chat-messages" ref={chatContainerRef} onScroll={updateJumpToBottomVisibility}>
+                    <div className="chat-messages" ref={chatContainerRef}>
                         {chatHistory.length === 0 && (
                             <div className="chat-empty">
                                 <div>{t('aiSidebar.emptyChatIcon')}</div>
@@ -1198,12 +1188,6 @@ export default function AiSidebar({ onInsertText }) {
                             );
                         })}
                         <div ref={chatEndRef} />
-                        </div>
-                        {showJumpToBottom && (
-                            <button className="chat-jump-bottom" onClick={() => scrollToBottom('smooth')}>
-                                {t('aiSidebar.jumpToBottom')}
-                            </button>
-                        )}
                     </div>
 
                     {/* 输入框 */}
