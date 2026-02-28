@@ -9,6 +9,7 @@
 import { getChapters, saveChapters, getChapterSummary, saveChapterSummary } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId, setActiveWorkId, getProjectSettings, saveProjectSettings } from './settings';
 import { loadSessionStore, saveSessionStore } from './chat-sessions';
+import { exportAllAcePlaybooks, importAllAcePlaybooks } from './ace-playbook';
 
 const PROJECT_FILE_VERSION = 2;
 
@@ -63,6 +64,13 @@ export async function exportProject() {
         data.chatSessions = await loadSessionStore();
     } catch {
         data.chatSessions = { activeSessionId: null, sessions: [] };
+    }
+
+    // ACE playbooks (chat memory) — stored in IndexedDB.
+    try {
+        data.acePlaybooks = await exportAllAcePlaybooks();
+    } catch {
+        data.acePlaybooks = {};
     }
 
     // 项目设定（localStorage），去除 API Key
@@ -141,6 +149,11 @@ export async function importProject(file) {
         // 恢复聊天会话（IndexedDB）
         if (data.chatSessions && typeof data.chatSessions === 'object') {
             await saveSessionStore(data.chatSessions);
+        }
+
+        // 恢复 ACE Playbooks（IndexedDB）
+        if (data.acePlaybooks && typeof data.acePlaybooks === 'object') {
+            await importAllAcePlaybooks(data.acePlaybooks);
         }
 
         // 恢复章节摘要（IndexedDB）

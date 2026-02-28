@@ -28,6 +28,53 @@ function storageKey(workId) {
     return STORAGE_PREFIX + wid;
 }
 
+// Export all playbooks for backup/import. Stored as a map: { [workId]: playbook }.
+export async function exportAllAcePlaybooks() {
+    if (typeof window === 'undefined') return {};
+    try {
+        // Lazy import to avoid bundling keys() into critical path unless needed.
+        const { keys } = await import('idb-keyval');
+        const allKeys = await keys();
+        const out = {};
+        for (const k of allKeys) {
+            if (typeof k !== 'string') continue;
+            if (!k.startsWith(STORAGE_PREFIX)) continue;
+            try {
+                const pb = await get(k);
+                if (pb && typeof pb === 'object') {
+                    const wid = k.slice(STORAGE_PREFIX.length) || (pb.workId || 'work-default');
+                    out[wid] = pb;
+                }
+            } catch { /* ignore */ }
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+export async function importAllAcePlaybooks(map) {
+    if (typeof window === 'undefined') return 0;
+    const obj = (map && typeof map === 'object') ? map : null;
+    if (!obj) return 0;
+
+    let count = 0;
+    for (const [workId, pbRaw] of Object.entries(obj)) {
+        if (!pbRaw || typeof pbRaw !== 'object') continue;
+        const wid = (workId || pbRaw.workId || 'work-default').toString();
+        const pb = { ...pbRaw };
+        if (!pb.workId) pb.workId = wid;
+        if (!pb.version) pb.version = PLAYBOOK_VERSION;
+        if (!pb.nextId) pb.nextId = 1;
+        ensureSections(pb);
+        try {
+            await set(storageKey(wid), pb);
+            count += 1;
+        } catch { /* ignore */ }
+    }
+    return count;
+}
+
 function makeEmptyPlaybook(workId) {
     const sections = {};
     DEFAULT_SECTIONS.forEach(s => { sections[s.key] = { title: s.title, bullets: [] }; });
@@ -160,6 +207,44 @@ export async function resetAcePlaybook(workId) {
     const pb = makeEmptyPlaybook(workId);
     await saveAcePlaybook(workId, pb);
     return pb;
+}
+
+// Apply bullet tags from a reflector step.
+// tags: [{id, tag}] where tag is helpful|harmful|neutral (case-insensitive).
+export function applyAceBulletTags(playbook, tags) {
+    if (!playbook) return { playbook, updated: 0 };
+    ensureSections(playbook);
+
+    const arr = Array.isArray(tags) ? tags : [];
+    if (arr.length === 0) return { playbook, updated: 0 };
+
+    const now = nowIso();
+    const idToBullet = new Map();
+    for (const x of flattenBullets(playbook)) {
+        const id = x?.bullet?.id;
+        if (id) idToBullet.set(id, x.bullet);
+    }
+
+    let updated = 0;
+    for (const item of arr) {
+        const id = (item?.id || item?.bullet || '').toString().trim();
+        if (!id) continue;
+        const tag = (item?.tag || '').toString().trim().toLowerCase();
+        const b = idToBullet.get(id);
+        if (!b) continue;
+        if (tag === 'helpful') {
+            b.helpful = (b.helpful || 0) + 1;
+            b.updatedAt = now;
+            updated += 1;
+        } else if (tag === 'harmful') {
+            b.harmful = (b.harmful || 0) + 1;
+            b.updatedAt = now;
+            updated += 1;
+        }
+    }
+
+    if (updated > 0) playbook.updatedAt = now;
+    return { playbook, updated };
 }
 
 export function renderAcePlaybookForCurator(playbook, maxTokens = 2500) {

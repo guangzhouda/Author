@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { INPUT_TOKEN_BUDGET, buildContext, compileSystemPrompt } from '../lib/context-engine';
 import {
+    applyAceBulletTags,
     applyAceDeltaOperations,
     getAceSystemPromptAddon,
     loadAcePlaybook,
@@ -328,12 +329,14 @@ export default function AiSidebar({ onInsertText }) {
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
             let systemPrompt = compileSystemPrompt(context, 'chat');
+            let aceAddonForTurn = null;
 
             // ACE: inject relevant bullets right before "你的任务" to keep them salient.
             if (aceEnabled) {
                 try {
                     const workId = getActiveWorkId() || 'work-default';
                     const addon = await getAceSystemPromptAddon(workId, text, apiConfig, { topK: 12, maxTokens: 1200 });
+                    aceAddonForTurn = addon || null;
                     if (addon?.text) {
                         const sep = '\n\n---\n\n';
                         const parts = systemPrompt.split(sep);
@@ -395,10 +398,13 @@ export default function AiSidebar({ onInsertText }) {
                     try {
                         const pb = await loadAcePlaybook(workId);
                         const currentPlaybook = renderAcePlaybookForCurator(pb, 2600);
+                        const injected = aceAddonForTurn?.text ? String(aceAddonForTurn.text).slice(0, 2000) : '';
 
                         const curatorSystem = [
-                            '你是 ACE (Agentic Context Engineering) 框架中的 Curator。',
-                            '目标：把这次对话里“未来仍然有用且稳定”的信息，增量写入 playbook，避免上下文坍塌与过度摘要。',
+                            '你是 ACE (Agentic Context Engineering) 框架中的 Reflector + Curator。',
+                            '目标：',
+                            '1) 反思本轮对话中 playbook 注入是否有帮助：为本轮注入的 bullets 打标签 helpful/harmful/neutral（尽量保守，拿不准就 neutral）。',
+                            '2) 把这次对话里“未来仍然有用且稳定”的信息，增量写入 playbook（避免上下文坍塌与过度摘要）。',
                             '规则：',
                             '- 只输出严格 JSON（不要 markdown/代码块）。',
                             '- 只允许输出 operations 的增量更新，不要重写整个 playbook。',
@@ -407,6 +413,7 @@ export default function AiSidebar({ onInsertText }) {
                             '- 不要记录任何密钥、token、个人隐私或可识别信息。',
                             '- 避免冗余：如果 playbook 已包含同样信息，就不要再添加。',
                             '- 每次最多输出 5 条 ADD。',
+                            '- bullet_tags 最多输出 12 条；只针对“本轮注入的 bullets”打标签。',
                             '可用 section: preferences, project, workflow, open_threads, misc',
                         ].join('\n');
 
@@ -414,13 +421,19 @@ export default function AiSidebar({ onInsertText }) {
                             '【当前 Playbook】',
                             currentPlaybook || '(empty)',
                             '',
+                            '【本轮注入的 Bullets（如果为空则忽略 bullet_tags）】',
+                            injected || '(none)',
+                            '',
                             '【本次对话】',
                             `用户：${String(userText || '').slice(0, 3000)}`,
                             `助手：${String(assistantText || '').slice(0, 3000)}`,
                             '',
                             '请输出 JSON：',
                             '{',
-                            '  "reasoning": "...",',
+                            '  "notes": "...",',
+                            '  "bullet_tags": [',
+                            '    {"id":"ace-00001","tag":"helpful|harmful|neutral"}',
+                            '  ],',
                             '  "operations": [',
                             '    {"type":"ADD","section":"preferences|project|workflow|open_threads|misc","content":"..."}',
                             '  ]',
@@ -440,11 +453,12 @@ export default function AiSidebar({ onInsertText }) {
                         );
 
                         const delta = parseJsonFromModel(curatorOut);
-                        const ops = delta?.operations;
-                        if (!Array.isArray(ops) || ops.length === 0) return;
+                        const tags = delta?.bullet_tags || delta?.bulletTags || [];
+                        const ops = delta?.operations || [];
+                        const { playbook: taggedPb, updated: tagged } = applyAceBulletTags(pb, tags);
+                        const { playbook: nextPb, added, merged } = await applyAceDeltaOperations(taggedPb, ops, apiConfig);
 
-                        const { playbook: nextPb, added, merged } = await applyAceDeltaOperations(pb, ops, apiConfig);
-                        if (added > 0 || merged > 0) {
+                        if ((added > 0 || merged > 0 || tagged > 0) && nextPb) {
                             await saveAcePlaybook(workId, nextPb);
                             // Keep it quiet by default; toast only on failures.
                         }
