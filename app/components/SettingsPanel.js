@@ -750,6 +750,15 @@ const PROVIDERS = [
     { key: 'custom', label: '自定义 (OpenAI兼容)', baseUrl: '', models: [] },
 ];
 
+function getDefaultEmbedModel(providerKey) {
+    if (providerKey === 'zhipu') return 'embedding-3';
+    if (providerKey === 'openai') return 'text-embedding-3-small';
+    if (providerKey === 'gemini-native') return 'text-embedding-004';
+    if (providerKey === 'gemini') return 'text-embedding-004';
+    if (providerKey === 'siliconflow') return 'Qwen/Qwen3-Embedding-4B';
+    return 'text-embedding-v3-small';
+}
+
 function PreferencesForm() {
     const { language, setLanguage, visualTheme, setVisualTheme, focusMode, setFocusMode } = useAppStore();
     const { t } = useI18n();
@@ -1076,8 +1085,8 @@ function ApiConfigForm({ data, onChange }) {
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('apiConfig.embedProvider')}</label>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                            {PROVIDERS.filter(p => !['deepseek', 'moonshot', 'siliconflow', 'openai'].includes(p.key)).map(p => (
-                                <button key={p.key} style={{ padding: '8px 12px', border: data.embedProvider === p.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: data.embedProvider === p.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, fontWeight: data.embedProvider === p.key ? 600 : 400, color: data.embedProvider === p.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => onChange({ ...data, embedProvider: p.key, embedBaseUrl: p.key === 'custom' ? '' : (p.baseUrl || data.embedBaseUrl), embedModel: p.key === 'custom' ? '' : (p.key === 'zhipu' ? 'embedding-3' : 'text-embedding-v3-small') })}>{p.label}</button>
+                            {PROVIDERS.filter(p => !['deepseek', 'moonshot'].includes(p.key)).map(p => (
+                                <button key={p.key} style={{ padding: '8px 12px', border: data.embedProvider === p.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: data.embedProvider === p.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, fontWeight: data.embedProvider === p.key ? 600 : 400, color: data.embedProvider === p.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => onChange({ ...data, embedProvider: p.key, embedBaseUrl: p.key === 'custom' ? '' : (p.baseUrl || data.embedBaseUrl), embedModel: p.key === 'custom' ? '' : getDefaultEmbedModel(p.key) })}>{p.label}</button>
                             ))}
                         </div>
                     </div>

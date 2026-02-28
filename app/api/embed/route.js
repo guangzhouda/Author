@@ -2,6 +2,15 @@
 
 export const runtime = 'edge';
 
+function getDefaultEmbedModel(provider) {
+    if (provider === 'zhipu') return 'embedding-3';
+    if (provider === 'openai') return 'text-embedding-3-small';
+    if (provider === 'gemini-native') return 'text-embedding-004';
+    if (provider === 'gemini') return 'text-embedding-004';
+    if (provider === 'siliconflow') return 'Qwen/Qwen3-Embedding-4B';
+    return 'text-embedding-v3-small';
+}
+
 export async function POST(request) {
     try {
         const { text, apiConfig } = await request.json();
@@ -29,12 +38,12 @@ export async function POST(request) {
 
         let embedModelName;
         if (isCustomEmbed) {
-            embedModelName = apiConfig.embedModel || 'embedding-3';
+            embedModelName = apiConfig.embedModel || getDefaultEmbedModel(provider);
         } else if (provider === 'custom') {
-            // 如果没开独立embed，但选了custom，默认用text-embedding-v3-small或用户主模型
-            embedModelName = 'text-embedding-v3-small';
+            // 如果没开独立 embed，但选了 custom，则尽量给出一个可用的默认值。
+            embedModelName = getDefaultEmbedModel(provider);
         } else {
-            embedModelName = provider === 'zhipu' ? 'embedding-3' : 'text-embedding-v3-small';
+            embedModelName = getDefaultEmbedModel(provider);
         }
 
         if (!apiKey) {
