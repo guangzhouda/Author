@@ -2,6 +2,18 @@
 
 export const runtime = 'edge';
 
+function getDefaultBaseUrl(provider) {
+    if (provider === 'zhipu') return 'https://open.bigmodel.cn/api/paas/v4';
+    if (provider === 'deepseek') return 'https://api.deepseek.com/v1';
+    if (provider === 'openai') return 'https://api.openai.com/v1';
+    if (provider === 'gemini-native') return 'https://generativelanguage.googleapis.com/v1beta';
+    if (provider === 'gemini') return 'https://generativelanguage.googleapis.com/v1beta/openai';
+    if (provider === 'siliconflow') return 'https://api.siliconflow.cn/v1';
+    if (provider === 'moonshot') return 'https://api.moonshot.cn/v1';
+    if (provider === 'custom') return '';
+    return 'https://open.bigmodel.cn/api/paas/v4';
+}
+
 function getDefaultEmbedModel(provider) {
     if (provider === 'zhipu') return 'embedding-3';
     if (provider === 'openai') return 'text-embedding-3-small';
@@ -19,19 +31,23 @@ export async function POST(request) {
         const provider = isCustomEmbed ? apiConfig.embedProvider : (apiConfig?.provider || 'zhipu');
         const apiKey = isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey;
 
-        // 自动识别默认填写或遗留的智谱URL并矫正为对应官方URL
-        let defaultBaseUrl = provider === 'gemini-native' ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://open.bigmodel.cn/api/paas/v4';
-
         let rawBaseUrl;
         if (isCustomEmbed) {
             rawBaseUrl = apiConfig.embedBaseUrl;
         } else {
             // 如果是自定义提供商且没开独立Embed，默认继承对聊的baseUrl
-            rawBaseUrl = apiConfig?.baseUrl || defaultBaseUrl;
+            rawBaseUrl = apiConfig?.baseUrl;
         }
 
-        if (!rawBaseUrl || (provider === 'gemini-native' && rawBaseUrl.includes('open.bigmodel.cn'))) {
-            rawBaseUrl = defaultBaseUrl;
+        // 自动补全默认 baseUrl（兼容未填写的情况）
+        if (!rawBaseUrl) rawBaseUrl = getDefaultBaseUrl(provider);
+        // 兼容遗留的错误 URL：Gemini 原生接口不能用智谱的 baseUrl
+        if (provider === 'gemini-native' && rawBaseUrl.includes('open.bigmodel.cn')) {
+            rawBaseUrl = getDefaultBaseUrl(provider);
+        }
+
+        if (!rawBaseUrl) {
+            return new Response(JSON.stringify({ error: '请在API配置中填写 Embedding API 地址' }), { status: 400 });
         }
 
         const baseUrl = rawBaseUrl.replace(/\/$/, '');

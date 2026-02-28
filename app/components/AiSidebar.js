@@ -6,7 +6,9 @@ import {
     applyAceDeltaOperations,
     getAceSystemPromptAddon,
     loadAcePlaybook,
+    renderAcePlaybookAsText,
     renderAcePlaybookForCurator,
+    resetAcePlaybook,
     saveAcePlaybook,
 } from '../lib/ace-playbook';
 import {
@@ -85,6 +87,42 @@ export default function AiSidebar({ onInsertText }) {
         } catch { /* ignore */ }
     }, [aceEnabled]);
     const aceUpdateChainRef = useRef(Promise.resolve());
+
+    // ACE playbook viewer state (for the Playbook tab)
+    const [acePlaybookLoading, setAcePlaybookLoading] = useState(false);
+    const [acePlaybookText, setAcePlaybookText] = useState('');
+
+    const refreshAcePlaybook = useCallback(async () => {
+        try {
+            setAcePlaybookLoading(true);
+            const workId = getActiveWorkId() || 'work-default';
+            const pb = await loadAcePlaybook(workId);
+            setAcePlaybookText(renderAcePlaybookAsText(pb, 12000) || '');
+        } catch (e) {
+            console.warn('Failed to load ACE playbook:', e?.message || e);
+            setAcePlaybookText('');
+            showToast(t('aiSidebar.playbookLoadFailed'), 'error');
+        } finally {
+            setAcePlaybookLoading(false);
+        }
+    }, [showToast, t]);
+
+    const handleResetAcePlaybook = useCallback(async () => {
+        const ok = typeof window !== 'undefined' ? window.confirm(t('aiSidebar.playbookResetConfirm')) : false;
+        if (!ok) return;
+        try {
+            setAcePlaybookLoading(true);
+            const workId = getActiveWorkId() || 'work-default';
+            const pb = await resetAcePlaybook(workId);
+            setAcePlaybookText(renderAcePlaybookAsText(pb, 12000) || '');
+            showToast(t('aiSidebar.playbookResetDone'), 'success');
+        } catch (e) {
+            console.warn('Failed to reset ACE playbook:', e?.message || e);
+            showToast(t('aiSidebar.playbookResetFailed'), 'error');
+        } finally {
+            setAcePlaybookLoading(false);
+        }
+    }, [showToast, t]);
 
     // Streaming abort controller (Stop button)
     const streamAbortRef = useRef(null);
@@ -182,6 +220,13 @@ export default function AiSidebar({ onInsertText }) {
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [activeTab, open]);
+
+    // When switching to Playbook tab, refresh its content.
+    useEffect(() => {
+        if (activeTab === 'playbook' && open) {
+            refreshAcePlaybook();
+        }
+    }, [activeTab, open, refreshAcePlaybook]);
 
     // 新消息自动加入 checkedHistory（仅追加，不全量重置）
     useEffect(() => {
@@ -750,6 +795,7 @@ export default function AiSidebar({ onInsertText }) {
         { key: 'chat', label: t('aiSidebar.tabChat') },
         { key: 'archive', label: t('aiSidebar.tabArchive') },
         { key: 'reference', label: t('aiSidebar.tabReference') },
+        { key: 'playbook', label: t('aiSidebar.tabPlaybook') },
     ];
 
     const MODE_LABELS = {
@@ -1321,6 +1367,40 @@ export default function AiSidebar({ onInsertText }) {
                         <button className="btn-mini" onClick={selectNone}>{t('aiSidebar.selectNone')}</button>
                         <button className="btn-mini" onClick={resetSelection}>{t('aiSidebar.reset')}</button>
                         <button className="btn-mini" onClick={onOpenSettings}>{t('aiSidebar.settings')}</button>
+                    </div>
+                </div>
+            )}
+
+            {/* ==================== 🧠 Playbook Tab ==================== */}
+            {activeTab === 'playbook' && (
+                <div className="ai-sidebar-body">
+                    <div className="chat-controls">
+                        <div className="chat-control-item" style={{ cursor: 'default' }}>
+                            <span>{t('aiSidebar.playbookHint')}</span>
+                        </div>
+                        <div className="chat-control-actions">
+                            <button className="btn-mini" onClick={refreshAcePlaybook} disabled={acePlaybookLoading}>
+                                {t('aiSidebar.playbookRefresh')}
+                            </button>
+                            <button className="btn-mini" onClick={() => handleCopyText(acePlaybookText)} disabled={!acePlaybookText}>
+                                {t('aiSidebar.copy')}
+                            </button>
+                            <button className="btn-mini danger" onClick={handleResetAcePlaybook} disabled={acePlaybookLoading}>
+                                {t('common.reset')}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+                        {acePlaybookLoading ? (
+                            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+                                {t('aiSidebar.playbookLoading')}
+                            </div>
+                        ) : (
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-writing)', fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                                {acePlaybookText || t('aiSidebar.playbookEmpty')}
+                            </pre>
+                        )}
                     </div>
                 </div>
             )}
