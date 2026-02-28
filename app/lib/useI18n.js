@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import en from '../locales/en.json';
 import zh from '../locales/zh.json';
@@ -11,7 +12,7 @@ export function useI18n() {
     // Default to 'zh' if language is null initially
     const language = useAppStore(state => state.language) || 'zh';
 
-    const t = (path) => {
+    const t = useCallback((path) => {
         const keys = path.split('.');
         let current = translations[language] || translations['zh'];
 
@@ -32,7 +33,7 @@ export function useI18n() {
             current = current[key];
         }
         return current;
-    };
+    }, [language]);
 
     return { t, language };
 }

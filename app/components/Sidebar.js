@@ -15,6 +15,7 @@ export default function Sidebar() {
         theme, setTheme,
         writingMode,
         setShowSettings,
+        setShowOutline,
         setShowSnapshots,
         showToast
     } = useAppStore();
@@ -118,6 +119,14 @@ export default function Sidebar() {
                         onClick={handleCreateChapter}
                     >
                         {t('sidebar.newChapter')}
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+                        onClick={() => setShowOutline(true)}
+                        title={t('outline.title')}
+                    >
+                        {t('sidebar.outline')}
                     </button>
                 </div>
 

@@ -248,6 +248,7 @@
     "reference": "📚 Ref",
     "inputPlaceholder": "Type your message... (Enter to send, Shift+Enter for new line)",
     "newChapter": "＋ New Chapter",
+    "outline": "📋 Outline",
     "chapterList": "Chapter List",
     "totalWords": "Total Words",
     "exportCurrent": "Export Current",
@@ -418,6 +419,21 @@
     "targetAudience": "Target Audience",
     "targetAudiencePlaceholder": "E.g.: Male web novel readers aged 18-30, female romance readers..."
   },
+  "outline": {
+    "title": "Outline",
+    "subtitle": "Rough / Detailed (Auto-save)",
+    "roughLabel": "Rough Outline",
+    "detailedLabel": "Detailed Outline",
+    "roughPlaceholder": "Write the main direction, pacing, and core conflicts...",
+    "detailedPlaceholder": "Write a detailed progression by chapters/scenes: beats, foreshadowing, twists, climax...",
+    "autoSaveHint": "Auto-save",
+    "saveBtn": "💾 Save",
+    "saving": "Saving…",
+    "saved": "Outline saved",
+    "saveFailed": "Save failed",
+    "loading": "Loading…",
+    "saveTip": "Save outline"
+  },
   "common": {
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -425,6 +441,7 @@
     "rename": "Rename",
     "allCheck": "Select All",
     "allUncheck": "Clear All",
-    "reset": "Reset"
+    "reset": "Reset",
+    "close": "Close"
   }
 }

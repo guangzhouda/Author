@@ -248,6 +248,7 @@
         "reference": "📚 参考",
         "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
         "newChapter": "＋ 新建章节",
+        "outline": "📋 大纲",
         "chapterList": "章节列表",
         "totalWords": "全书总字数",
         "exportCurrent": "导出本章",
@@ -418,6 +419,21 @@
         "targetAudience": "目标读者",
         "targetAudiencePlaceholder": "例：18-30岁男性网文读者、女性言情读者..."
     },
+    "outline": {
+        "title": "大纲",
+        "subtitle": "粗纲/细纲（自动保存）",
+        "roughLabel": "粗纲",
+        "detailedLabel": "细纲",
+        "roughPlaceholder": "写下故事的核心走向、节奏、主要矛盾……",
+        "detailedPlaceholder": "按章节/场景写详细推进：起承转合、伏笔、反转、高潮……",
+        "autoSaveHint": "自动保存",
+        "saveBtn": "💾 保存",
+        "saving": "保存中…",
+        "saved": "大纲已保存",
+        "saveFailed": "保存失败",
+        "loading": "正在加载…",
+        "saveTip": "保存大纲"
+    },
     "common": {
         "cancel": "取消",
         "confirm": "确定",
@@ -425,6 +441,7 @@
         "rename": "重命名",
         "allCheck": "全选",
         "allUncheck": "全不选",
-        "reset": "重置"
+        "reset": "重置",
+        "close": "关闭"
     }
 }

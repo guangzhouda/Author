@@ -23,6 +23,7 @@ import { createSnapshot } from './lib/snapshots';
 const Sidebar = dynamic(() => import('./components/Sidebar'), { ssr: false });
 const Editor = dynamic(() => import('./components/Editor'), { ssr: false });
 const SettingsPanel = dynamic(() => import('./components/SettingsPanel'), { ssr: false });
+const OutlinePanel = dynamic(() => import('./components/OutlinePanel'), { ssr: false });
 const HelpPanel = dynamic(() => import('./components/HelpPanel'), { ssr: false });
 const TourOverlay = dynamic(() => import('./components/TourOverlay'), { ssr: false });
 const AiSidebar = dynamic(() => import('./components/AiSidebar'), { ssr: false });
@@ -540,6 +541,7 @@ export default function Home() {
 
       {/* ===== 设定库弹窗 ===== */}
       <SettingsPanel />
+      <OutlinePanel />
       <SnapshotManager />
 
       {/* ===== 帮助文档 ===== */}
