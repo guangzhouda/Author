@@ -201,30 +201,50 @@ export default function AiSidebar({ onInsertText }) {
     const chatEndRef = useRef(null);
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
+    const chatAutoScrollRef = useRef(true);
 
     // Chat scroll helpers (jump to latest)
     const scrollToBottom = useCallback((behavior = 'smooth') => {
-        try {
-            chatEndRef.current?.scrollIntoView({ behavior });
-        } catch { /* ignore */ }
+        // Mark "pinned to bottom" so streaming updates keep following the latest content.
+        chatAutoScrollRef.current = true;
+
+        const container = chatContainerRef.current;
+        if (container) {
+            try {
+                container.scrollTo({ top: container.scrollHeight, behavior });
+            } catch {
+                // Fallback for environments that don't support scrollTo options.
+                container.scrollTop = container.scrollHeight;
+            }
+            return;
+        }
+
+        try { chatEndRef.current?.scrollIntoView({ behavior }); } catch { /* ignore */ }
+    }, []);
+
+    const updateChatAutoScrollFlag = useCallback(() => {
+        const container = chatContainerRef.current;
+        if (!container) return;
+        const threshold = 80;
+        chatAutoScrollRef.current = (container.scrollHeight - container.scrollTop - container.clientHeight) < threshold;
     }, []);
 
     // Unmount safety
     useEffect(() => () => { streamAbortRef.current?.abort(); }, []);
 
-    // 新消息时只在用户已滚动到底部时才自动滚动（不劫持用户滚动）
+    const lastMsg = chatHistory[chatHistory.length - 1];
+    const lastMsgId = lastMsg?.id || '';
+    const lastMsgTextLen = (lastMsg?.content || '').length;
+    const lastMsgThinkingLen = (lastMsg?.thinking || '').length;
+
+    // 自动滚动：新消息 + 流式生成时，只有在用户“贴底”时才跟随（不劫持用户滚动）
     useEffect(() => {
-        const container = chatContainerRef.current;
-        if (!container) {
-            scrollToBottom('auto');
-            return;
-        }
-        const threshold = 80;
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-        if (isNearBottom) {
-            scrollToBottom('smooth');
-        }
-    }, [chatHistory.length, scrollToBottom]);
+        if (!open || activeTab !== 'chat') return;
+        if (!chatAutoScrollRef.current) return;
+
+        // In streaming mode, avoid smooth scrolling on every chunk.
+        scrollToBottom(chatStreaming ? 'auto' : 'smooth');
+    }, [open, activeTab, chatHistory.length, lastMsgId, lastMsgTextLen, lastMsgThinkingLen, chatStreaming, scrollToBottom]);
 
     // 切到聊天 Tab 时聚焦输入框
     useEffect(() => {
@@ -998,7 +1018,7 @@ export default function AiSidebar({ onInsertText }) {
                     )}
 
                     {/* 对话消息列表 */}
-                    <div className="chat-messages" ref={chatContainerRef}>
+                    <div className="chat-messages" ref={chatContainerRef} onScroll={updateChatAutoScrollFlag}>
                         {chatHistory.length === 0 && (
                             <div className="chat-empty">
                                 <div>{t('aiSidebar.emptyChatIcon')}</div>
