@@ -4,6 +4,7 @@
 import { getChapters } from './storage';
 import { getProjectSettings, getSettingsNodes, getWritingMode, getActiveWorkId } from './settings';
 import { getEmbedding, cosineSimilarity } from './embeddings';
+import { peekChapterOutline } from './chapter-outline';
 
 // ==================== Token 预算管理 ====================
 
@@ -22,6 +23,7 @@ export function estimateTokens(text) {
 const PRIORITY = {
     writingRules: 1,   // 写作规则——必须严格遵守
     currentChapter: 2, // 当前章节元信息
+    chapterOutline: 2.5, // 当前章节粗纲/细纲（比全局大纲更具体）
     characters: 3,     // 人物设定
     plotOutline: 4,    // 大纲
     bookInfo: 5,       // 作品信息
@@ -155,6 +157,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     const chapters = await getChapters();
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
+    const includeCurrent = (!selectedIds || selectedIds.has('chapter-current'));
 
     // 从树形节点读取设定（过滤掉禁用项，并按当前作品过滤）
     const allNodes = await getSettingsNodes();
@@ -236,6 +239,15 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
 
     const writingMode = getWritingMode();
 
+    // 章节大纲（粗纲/细纲）— 独立于设定树，存于 IndexedDB。
+    let chapterOutline = '';
+    if (includeCurrent && activeChapterId) {
+        try {
+            const outline = await peekChapterOutline(activeChapterId);
+            chapterOutline = buildChapterOutlineContext(outline);
+        } catch { /* ignore */ }
+    }
+
     // 先构建各模块的原始文本
     const rawModules = {
         bookInfo: (selectedIds && selectedIds.has('bookinfo')) ? buildBookInfoContext(settings.bookInfo) : '',
@@ -244,12 +256,13 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
         worldbuilding: buildWorldContext(finalItemNodes.filter(n => n.category === 'world'), nodes),
         objects: buildObjectsContext(finalItemNodes.filter(n => n.category === 'object'), nodes),
         plotOutline: buildPlotContext(finalItemNodes.filter(n => n.category === 'plot'), nodes),
+        chapterOutline,
         writingRules: buildRulesContext(finalItemNodes.filter(n => n.category === 'rules')),
         customSettings: buildCustomContext(finalItemNodes.filter(n => n.category === 'custom'), nodes),
         previousChapters: selectedIds
             ? buildPreviousContextFiltered(chapters, currentIndex, selectedIds)
             : buildPreviousContext(chapters, currentIndex),
-        currentChapter: (!selectedIds || selectedIds.has('chapter-current'))
+        currentChapter: includeCurrent
             ? buildCurrentContext(currentChapter, currentIndex, chapters.length)
             : '',
     };
@@ -441,6 +454,9 @@ export function compileSystemPrompt(context, mode) {
     if (context.plotOutline) {
         sections.push(`【剧情大纲】\n${context.plotOutline}`);
     }
+    if (context.chapterOutline) {
+        sections.push(`【本章大纲（粗纲/细纲）】\n${context.chapterOutline}`);
+    }
     if (context.writingRules) {
         sections.push(`【写作规则——必须严格遵守】\n${context.writingRules}`);
     }
@@ -560,6 +576,18 @@ function buildPlotContext(plotNodes, allNodes) {
         return `[${path}]${status} (id: ${n.id})
 ${desc}`;
     }).join('\n\n');
+}
+
+function buildChapterOutlineContext(outline) {
+    if (!outline || typeof outline !== 'object') return '';
+    const rough = (outline.rough || '').trim();
+    const detailed = (outline.detailed || '').trim();
+    if (!rough && !detailed) return '';
+
+    const parts = [];
+    if (rough) parts.push(`【粗纲】\n${rough}`);
+    if (detailed) parts.push(`【细纲】\n${detailed}`);
+    return parts.join('\n\n');
 }
 
 // 从树节点构建写作规则

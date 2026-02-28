@@ -14,6 +14,8 @@ import {
 } from './lib/storage';
 import { buildContext, compileSystemPrompt, compileUserPrompt, OUTPUT_TOKEN_BUDGET, getContextItems, estimateTokens } from './lib/context-engine';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
+import { getAceSystemPromptAddon } from './lib/ace-playbook';
+import { injectAceAddonIntoSystemPrompt } from './lib/ace-generator';
 import {
   loadSessionStore, createSession, getActiveSession,
 } from './lib/chat-sessions';
@@ -165,12 +167,28 @@ export default function Home() {
   // Inline AI 回调：编辑器调用此函数发起 AI 请求
   const handleInlineAiRequest = useCallback(async ({ mode, text, instruction, signal, onChunk }) => {
     try {
+      const { apiConfig } = getProjectSettings();
+
       // 使用上下文引擎收集项目信息
       const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
-      const systemPrompt = compileSystemPrompt(context, mode);
-      const userPrompt = compileUserPrompt(mode, text, instruction);
+      let systemPrompt = compileSystemPrompt(context, mode);
 
-      const { apiConfig } = getProjectSettings();
+      // ACE: inject evolving playbook bullets (optional).
+      const aceEnabled = (typeof window !== 'undefined') && localStorage.getItem('author-ace-enabled') === '1';
+      if (aceEnabled) {
+        try {
+          const workId = getActiveWorkId() || 'work-default';
+          const aceQuery = (instruction || '').trim() || (text || '').trim() || mode;
+          const addon = await getAceSystemPromptAddon(workId, aceQuery, apiConfig, { topK: 12, maxTokens: 1200 });
+          if (addon?.text) {
+            systemPrompt = injectAceAddonIntoSystemPrompt(systemPrompt, addon.text);
+          }
+        } catch (e) {
+          console.warn('ACE add-on failed (inline AI):', e?.message || e);
+        }
+      }
+
+      const userPrompt = compileUserPrompt(mode, text, instruction);
       const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
 
       const res = await fetch(apiEndpoint, {
