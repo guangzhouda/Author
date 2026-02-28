@@ -12,6 +12,9 @@ import {
     resetAcePlaybook,
     saveAcePlaybook,
 } from '../lib/ace-playbook';
+import { injectAceAddonIntoSystemPrompt } from '../lib/ace-generator';
+import { buildAceReflectorPrompts } from '../lib/ace-reflector';
+import { buildAceCuratorPrompts } from '../lib/ace-curator';
 import {
     saveSessionStore, createSession, deleteSession as deleteSessionFn,
     renameSession, switchSession, getActiveSession, addMessage, editMessage as editMsgFn,
@@ -258,17 +261,22 @@ export default function AiSidebar({ onInsertText }) {
     }, [slidingWindow, slidingWindowSize, chatHistory.length]);
 
     // --- 通用 SSE 流式读取，支持 text+thinking ---
-    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal, maxTokens = 2000) => {
+    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal, maxTokensOrOpts = 2000) => {
         const decoder = new TextDecoder();
         let buffer = '';
         let fullText = '';
         let fullThinking = '';
 
+        const opts = (maxTokensOrOpts && typeof maxTokensOrOpts === 'object') ? maxTokensOrOpts : null;
+        const maxTokens = typeof maxTokensOrOpts === 'number' ? maxTokensOrOpts : (opts?.maxTokens || 2000);
+        const temperature = opts?.temperature;
+        const topP = opts?.topP;
+
         try {
             const res = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens }),
+                body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP }),
                 signal,
             });
 
@@ -338,12 +346,7 @@ export default function AiSidebar({ onInsertText }) {
                     const addon = await getAceSystemPromptAddon(workId, text, apiConfig, { topK: 12, maxTokens: 1200 });
                     aceAddonForTurn = addon || null;
                     if (addon?.text) {
-                        const sep = '\n\n---\n\n';
-                        const parts = systemPrompt.split(sep);
-                        const aceSection = `【ACE Playbook（对话记忆，仅供参考）】\n${addon.text}`;
-                        if (parts.length >= 2) parts.splice(parts.length - 1, 0, aceSection);
-                        else parts.push(aceSection);
-                        systemPrompt = parts.join(sep);
+                        systemPrompt = injectAceAddonIntoSystemPrompt(systemPrompt, addon.text);
                     }
                 } catch (e) {
                     console.warn('ACE add-on failed:', e?.message || e);
@@ -397,65 +400,55 @@ export default function AiSidebar({ onInsertText }) {
                 aceUpdateChainRef.current = aceUpdateChainRef.current.then(async () => {
                     try {
                         const pb = await loadAcePlaybook(workId);
-                        const currentPlaybook = renderAcePlaybookForCurator(pb, 2600);
-                        const injected = aceAddonForTurn?.text ? String(aceAddonForTurn.text).slice(0, 2000) : '';
+                        const injectedBulletsText = aceAddonForTurn?.text ? String(aceAddonForTurn.text) : '';
 
-                        const curatorSystem = [
-                            '你是 ACE (Agentic Context Engineering) 框架中的 Reflector + Curator。',
-                            '目标：',
-                            '1) 反思本轮对话中 playbook 注入是否有帮助：为本轮注入的 bullets 打标签 helpful/harmful/neutral（尽量保守，拿不准就 neutral）。',
-                            '2) 把这次对话里“未来仍然有用且稳定”的信息，增量写入 playbook（避免上下文坍塌与过度摘要）。',
-                            '规则：',
-                            '- 只输出严格 JSON（不要 markdown/代码块）。',
-                            '- 只允许输出 operations 的增量更新，不要重写整个 playbook。',
-                            '- operations 仅使用 type=ADD。',
-                            '- 只记录用户明确表达的、可长期复用的偏好/约束/事实/工作流/未决事项；不要记录一次性临时指令。',
-                            '- 不要记录任何密钥、token、个人隐私或可识别信息。',
-                            '- 避免冗余：如果 playbook 已包含同样信息，就不要再添加。',
-                            '- 每次最多输出 5 条 ADD。',
-                            '- bullet_tags 最多输出 12 条；只针对“本轮注入的 bullets”打标签。',
-                            '可用 section: preferences, project, workflow, open_threads, misc',
-                        ].join('\n');
+                        // 1) Reflector: tag injected bullets and propose memory candidates.
+                        const reflectorPrompts = buildAceReflectorPrompts({
+                            injectedBulletsText,
+                            userText,
+                            assistantText,
+                        });
 
-                        const curatorUser = [
-                            '【当前 Playbook】',
-                            currentPlaybook || '(empty)',
-                            '',
-                            '【本轮注入的 Bullets（如果为空则忽略 bullet_tags）】',
-                            injected || '(none)',
-                            '',
-                            '【本次对话】',
-                            `用户：${String(userText || '').slice(0, 3000)}`,
-                            `助手：${String(assistantText || '').slice(0, 3000)}`,
-                            '',
-                            '请输出 JSON：',
-                            '{',
-                            '  "notes": "...",',
-                            '  "bullet_tags": [',
-                            '    {"id":"ace-00001","tag":"helpful|harmful|neutral"}',
-                            '  ],',
-                            '  "operations": [',
-                            '    {"type":"ADD","section":"preferences|project|workflow|open_threads|misc","content":"..."}',
-                            '  ]',
-                            '}',
-                        ].join('\n');
+                        let reflectorOut = '';
+                        await streamResponse(
+                            apiEndpoint,
+                            reflectorPrompts.systemPrompt,
+                            reflectorPrompts.userPrompt,
+                            apiConfig,
+                            () => { },
+                            (finalText) => { reflectorOut = finalText || ''; },
+                            undefined,
+                            { maxTokens: reflectorPrompts.maxTokens || 900, temperature: reflectorPrompts.temperature ?? 0.2 },
+                        );
+
+                        const reflector = parseJsonFromModel(reflectorOut) || {};
+                        const tags = reflector?.bullet_tags || reflector?.bulletTags || [];
+                        const candidates = reflector?.memory_candidates || reflector?.memoryCandidates || [];
+                        const { playbook: taggedPb, updated: tagged } = applyAceBulletTags(pb, tags);
+
+                        // 2) Curator: decide incremental playbook operations based on current playbook + reflector candidates.
+                        const curatorPlaybookText = renderAcePlaybookForCurator(taggedPb, 2600);
+                        const curatorPrompts = buildAceCuratorPrompts({
+                            currentPlaybookText: curatorPlaybookText,
+                            reflectorCandidates: candidates,
+                            userText,
+                            assistantText,
+                        });
 
                         let curatorOut = '';
                         await streamResponse(
                             apiEndpoint,
-                            curatorSystem,
-                            curatorUser,
+                            curatorPrompts.systemPrompt,
+                            curatorPrompts.userPrompt,
                             apiConfig,
                             () => { },
                             (finalText) => { curatorOut = finalText || ''; },
                             undefined,
-                            900,
+                            { maxTokens: curatorPrompts.maxTokens || 900, temperature: curatorPrompts.temperature ?? 0.2 },
                         );
 
-                        const delta = parseJsonFromModel(curatorOut);
-                        const tags = delta?.bullet_tags || delta?.bulletTags || [];
-                        const ops = delta?.operations || [];
-                        const { playbook: taggedPb, updated: tagged } = applyAceBulletTags(pb, tags);
+                        const curator = parseJsonFromModel(curatorOut) || {};
+                        const ops = curator?.operations || [];
                         const { playbook: nextPb, added, merged } = await applyAceDeltaOperations(taggedPb, ops, apiConfig);
 
                         if ((added > 0 || merged > 0 || tagged > 0) && nextPb) {
@@ -508,12 +501,7 @@ export default function AiSidebar({ onInsertText }) {
                     const workId = getActiveWorkId() || 'work-default';
                     const addon = await getAceSystemPromptAddon(workId, userMsg.content, apiConfig, { topK: 12, maxTokens: 1200 });
                     if (addon?.text) {
-                        const sep = '\n\n---\n\n';
-                        const parts = systemPrompt.split(sep);
-                        const aceSection = `【ACE Playbook（对话记忆，仅供参考）】\n${addon.text}`;
-                        if (parts.length >= 2) parts.splice(parts.length - 1, 0, aceSection);
-                        else parts.push(aceSection);
-                        systemPrompt = parts.join(sep);
+                        systemPrompt = injectAceAddonIntoSystemPrompt(systemPrompt, addon.text);
                     }
                 } catch (e) {
                     console.warn('ACE add-on failed:', e?.message || e);

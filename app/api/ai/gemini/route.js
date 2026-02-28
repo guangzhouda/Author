@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.GEMINI_API_KEY;
         let rawBaseUrl = apiConfig?.baseUrl;
@@ -36,8 +36,8 @@ export async function POST(request) {
                 }
             ],
             generationConfig: {
-                temperature: 0.8,
-                topP: 0.9,
+                temperature: (typeof temperature === 'number') ? temperature : 0.8,
+                topP: (typeof topP === 'number') ? topP : 0.9,
                 maxOutputTokens: maxTokens || 4000,
             },
         };

@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.ZHIPU_API_KEY;
         const baseUrl = apiConfig?.baseUrl || 'https://open.bigmodel.cn/api/paas/v4';
@@ -21,22 +21,25 @@ export async function POST(request) {
         const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
         // 请求上游 API，开启 stream 模式
+        const payload = {
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: (typeof temperature === 'number') ? temperature : 0.8,
+            max_tokens: maxTokens || 4096,
+            stream: true,
+        };
+        if (typeof topP === 'number') payload.top_p = topP;
+
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
             },
-            body: JSON.stringify({
-                model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.8,
-                max_tokens: maxTokens || 4096,
-                stream: true,
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
