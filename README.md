@@ -38,14 +38,18 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - Real-time word / character / paragraph count
 
 ### 🤖 AI Writing Assistant
-- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini
+- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI-compatible / Google Gemini / SiliconFlow / Moonshot (Kimi)
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Ghost Text** streaming preview — see AI output in real-time like Cursor, with accept/reject
+- **Right-side chat sidebar** — streaming, auto-scroll when pinned, jump-to-bottom
 - **Free chat mode** — discuss plot, characters, and settings with AI
 - **Context engine** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
+- **ACE Context Engineering (Playbook)** — optional evolving memory (Generator / Reflector / Curator) to improve prompts over time without fine-tuning
+- **Optional embeddings/RAG** — retrieve relevant settings via an OpenAI-compatible `/embeddings` API (e.g. SiliconFlow `Qwen/Qwen3-Embedding-4B`)
 
 ### 📚 Worldbuilding Manager
 - **Tree-structured** management for characters, locations, items, outlines, and writing rules
+- **Per-chapter outlines** — rough outline + detailed outline, autosave, chapter navigation
 - Three writing modes: **Web Novel** / **Literary Fiction** / **Screenplay**, each with dedicated fields
 - Color-coded categories with glassmorphism design
 - Settings automatically injected into AI context
@@ -133,6 +137,8 @@ Author supports multiple AI providers. Configure via **environment variables** o
 | ZhipuAI (GLM-4) | `ZHIPU_API_KEY` | [open.bigmodel.cn](https://open.bigmodel.cn/) |
 | Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | In-app config | [platform.deepseek.com](https://platform.deepseek.com/) |
+| SiliconFlow | In-app config | [siliconflow.cn](https://siliconflow.cn/) |
+| Moonshot (Kimi) | In-app config | [platform.moonshot.cn](https://platform.moonshot.cn/) |
 | OpenAI / Compatible | In-app config | [platform.openai.com](https://platform.openai.com/) |
 
 > 💡 **No API key required** for most editing features. AI features need at least one provider configured.

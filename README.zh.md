@@ -38,14 +38,18 @@
 - 实时字数/字符/段落统计
 
 ### 🤖 AI 写作助手
-- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini
+- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI兼容 / Google Gemini / SiliconFlow（硅基流动）/ Moonshot（Kimi）
 - **续写 / 改写 / 润色 / 扩写**，一键生成
 - **Ghost Text** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
+- **右侧聊天侧栏** — 流式生成、贴底自动滚动、跳转到底部
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
 - **上下文引擎** — AI 自动感知你的角色设定、世界观、前文，保持剧情连贯
+- **ACE 上下文工程（Playbook）** — Generator / Reflector / Curator 三模块，持续演化上下文（不微调权重）
+- **可选向量检索 / RAG** — 通过 OpenAI 兼容 Embeddings 接口自动召回相关设定（如 SiliconFlow `Qwen/Qwen3-Embedding-4B`）
 
 ### 📚 设定集管理
 - **树形结构**管理角色、地点、物品、大纲、写作规则
+- **按章节大纲** — 粗纲 + 细纲，自动保存，支持章节切换
 - 三种写作模式：**网文** / **传统文学** / **剧本**，每种模式有专属字段
 - 分类配色 + glassmorphism 视觉风格
 - 设定内容自动注入 AI 上下文
@@ -134,6 +138,8 @@ Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用
 | 智谱 AI (GLM-4) | `ZHIPU_API_KEY` | [open.bigmodel.cn](https://open.bigmodel.cn/) |
 | Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | 应用内配置 | [platform.deepseek.com](https://platform.deepseek.com/) |
+| SiliconFlow（硅基流动） | 应用内配置 | [siliconflow.cn](https://siliconflow.cn/) |
+| Moonshot（Kimi） | 应用内配置 | [platform.moonshot.cn](https://platform.moonshot.cn/) |
 | OpenAI / 兼容 | 应用内配置 | [platform.openai.com](https://platform.openai.com/) |
 
 > 💡 **无需 API Key 也能使用**大部分编辑功能。AI 功能需要至少配置一个供应商。
