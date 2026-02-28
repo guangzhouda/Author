@@ -10,6 +10,7 @@ import { getChapters, saveChapters, getChapterSummary, saveChapterSummary } from
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId, setActiveWorkId, getProjectSettings, saveProjectSettings } from './settings';
 import { loadSessionStore, saveSessionStore } from './chat-sessions';
 import { exportAllAcePlaybooks, importAllAcePlaybooks } from './ace-playbook';
+import { peekChapterOutline, saveChapterOutline } from './chapter-outline';
 
 const PROJECT_FILE_VERSION = 2;
 
@@ -98,6 +99,19 @@ export async function exportProject() {
     } catch { }
     data.chapterSummaries = summaries;
 
+    // 章节大纲（章纲）：按章节 ID 逐个读取（避免遍历 IndexedDB key）
+    const outlines = {};
+    try {
+        const chapters = Array.isArray(data.chapters) ? data.chapters : [];
+        for (const ch of chapters) {
+            const cid = ch?.id;
+            if (!cid) continue;
+            const outline = await peekChapterOutline(cid);
+            if (outline && (outline.rough || outline.detailed)) outlines[cid] = outline;
+        }
+    } catch { }
+    data.chapterOutlines = outlines;
+
     // 生成文件名
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
@@ -161,6 +175,15 @@ export async function importProject(file) {
             for (const [chapterId, summary] of Object.entries(data.chapterSummaries)) {
                 if (summary) {
                     await saveChapterSummary(chapterId, summary);
+                }
+            }
+        }
+
+        // 恢复章节大纲（章纲）：IndexedDB
+        if (data.chapterOutlines && typeof data.chapterOutlines === 'object') {
+            for (const [chapterId, outline] of Object.entries(data.chapterOutlines)) {
+                if (outline && typeof outline === 'object') {
+                    await saveChapterOutline(chapterId, outline);
                 }
             }
         }

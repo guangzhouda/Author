@@ -162,6 +162,7 @@ export default function AiSidebar({ onInsertText }) {
     // 派生状态
     const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
     const chatHistory = useMemo(() => activeSession?.messages || [], [activeSession]);
+    const activeSessionId = sessionStore?.activeSessionId;
 
     // 会话管理回调
     const setChatHistory = useCallback((newMessages) => setSessionStore(prev => replaceMessages(prev, newMessages)), [setSessionStore]);
@@ -201,6 +202,23 @@ export default function AiSidebar({ onInsertText }) {
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
 
+    // Chat scroll helpers (jump to latest)
+    const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+    const scrollToBottom = useCallback((behavior = 'smooth') => {
+        try {
+            chatEndRef.current?.scrollIntoView({ behavior });
+        } catch { /* ignore */ }
+    }, []);
+
+    const updateJumpToBottomVisibility = useCallback(() => {
+        const el = chatContainerRef.current;
+        if (!el) return;
+        const threshold = 80;
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+        const canScroll = el.scrollHeight > el.clientHeight + 50;
+        setShowJumpToBottom(canScroll && !nearBottom);
+    }, []);
+
     // Unmount safety
     useEffect(() => () => { streamAbortRef.current?.abort(); }, []);
 
@@ -208,22 +226,28 @@ export default function AiSidebar({ onInsertText }) {
     useEffect(() => {
         const container = chatContainerRef.current;
         if (!container) {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            scrollToBottom('auto');
             return;
         }
         const threshold = 80;
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
         if (isNearBottom) {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            scrollToBottom('smooth');
         }
-    }, [chatHistory]);
+        updateJumpToBottomVisibility();
+    }, [chatHistory.length, scrollToBottom, updateJumpToBottomVisibility]);
 
     // 切到聊天 Tab 时聚焦输入框
     useEffect(() => {
         if (activeTab === 'chat' && open) {
             setTimeout(() => inputRef.current?.focus(), 100);
+            // Chat tab is conditionally rendered; ensure we start at the latest message.
+            setTimeout(() => {
+                scrollToBottom('auto');
+                updateJumpToBottomVisibility();
+            }, 0);
         }
-    }, [activeTab, open]);
+    }, [activeTab, open, activeSessionId, scrollToBottom, updateJumpToBottomVisibility]);
 
     // When switching to Playbook tab, refresh its content.
     useEffect(() => {
@@ -817,7 +841,6 @@ export default function AiSidebar({ onInsertText }) {
 
     // 会话列表
     const sessions = sessionStore?.sessions || [];
-    const activeSessionId = sessionStore?.activeSessionId;
 
     if (!open) return null;
 
@@ -984,7 +1007,8 @@ export default function AiSidebar({ onInsertText }) {
                     )}
 
                     {/* 对话消息列表 */}
-                    <div className="chat-messages" ref={chatContainerRef}>
+                    <div className="chat-messages-wrap">
+                        <div className="chat-messages" ref={chatContainerRef} onScroll={updateJumpToBottomVisibility}>
                         {chatHistory.length === 0 && (
                             <div className="chat-empty">
                                 <div>{t('aiSidebar.emptyChatIcon')}</div>
@@ -1174,6 +1198,12 @@ export default function AiSidebar({ onInsertText }) {
                             );
                         })}
                         <div ref={chatEndRef} />
+                        </div>
+                        {showJumpToBottom && (
+                            <button className="chat-jump-bottom" onClick={() => scrollToBottom('smooth')}>
+                                {t('aiSidebar.jumpToBottom')}
+                            </button>
+                        )}
                     </div>
 
                     {/* 输入框 */}

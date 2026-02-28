@@ -1530,6 +1530,37 @@ body {
   margin-bottom: 16px;
 }
 
+.outline-panel-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+  width: 94%;
+  max-width: 980px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.outline-chapter-select {
+  max-width: 360px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  outline: none;
+}
+
+.outline-chapter-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
 .modal-input {
   width: 100%;
   padding: 10px 14px;
@@ -3392,6 +3423,13 @@ body {
 
 /* ===== 聊天消息区 ===== */
 
+.chat-messages-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -3399,6 +3437,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.chat-jump-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  transition: all var(--transition-fast);
+  opacity: 0.92;
+}
+
+.chat-jump-bottom:hover {
+  opacity: 1;
+  background: var(--bg-hover);
 }
 
 .chat-empty {

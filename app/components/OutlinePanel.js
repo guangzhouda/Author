@@ -1,193 +1,198 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
-import {
-    addSettingsNode,
-    getActiveWorkId,
-    getSettingsNodes,
-    setActiveWorkId,
-    updateSettingsNode,
-} from '../lib/settings';
-
-const OUTLINE_KINDS = {
-    rough: 'rough',
-    detailed: 'detailed',
-};
+import { loadChapterOutline, saveChapterOutline } from '../lib/chapter-outline';
 
 export default function OutlinePanel() {
-    const { showOutline: open, setShowOutline, showToast } = useAppStore();
+    const {
+        showOutline: open, setShowOutline, showToast,
+        chapters, activeChapterId,
+    } = useAppStore();
     const { t } = useI18n();
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [rough, setRough] = useState('');
     const [detailed, setDetailed] = useState('');
+    const [selectedChapterId, setSelectedChapterId] = useState(null);
 
-    const roughNodeIdRef = useRef(null);
-    const detailedNodeIdRef = useRef(null);
-    const roughTextRef = useRef('');
-    const detailedTextRef = useRef('');
+    const roughRef = useRef('');
+    const detailedRef = useRef('');
+    const chapterIdRef = useRef(null);
+    const dirtyRef = useRef(false);
+    const timerRef = useRef(null);
 
-    const pendingSaveRef = useRef(new Map()); // kind -> timeoutId
-    const dirtyKindsRef = useRef(new Set()); // kind
+    const selectedId = selectedChapterId || activeChapterId || null;
+    const selectedChapter = useMemo(
+        () => chapters?.find(ch => ch.id === selectedId) || null,
+        [chapters, selectedId]
+    );
+    const selectedIndex = useMemo(
+        () => (chapters || []).findIndex(ch => ch.id === selectedId),
+        [chapters, selectedId]
+    );
 
-    const clearTimers = useCallback(() => {
-        pendingSaveRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
-        pendingSaveRef.current.clear();
-    }, []);
-
-    const saveKind = useCallback(async (kind) => {
-        const nodeId = kind === OUTLINE_KINDS.rough ? roughNodeIdRef.current : detailedNodeIdRef.current;
-        if (!nodeId) return;
-
-        const description = kind === OUTLINE_KINDS.rough ? (roughTextRef.current || '') : (detailedTextRef.current || '');
-        await updateSettingsNode(nodeId, {
-            content: { outlineKind: kind, description },
-        });
-        dirtyKindsRef.current.delete(kind);
-    }, []);
-
-    const scheduleSave = useCallback((kind, delayMs = 800) => {
-        dirtyKindsRef.current.add(kind);
-        const prev = pendingSaveRef.current.get(kind);
-        if (prev) clearTimeout(prev);
-        const timeoutId = setTimeout(() => {
-            saveKind(kind).catch(() => { });
-        }, delayMs);
-        pendingSaveRef.current.set(kind, timeoutId);
-    }, [saveKind]);
-
-    const flushPendingSaves = useCallback(() => {
-        clearTimers();
-        // Fire-and-forget (do not block closing the panel).
-        const kinds = Array.from(dirtyKindsRef.current);
-        for (const kind of kinds) {
-            saveKind(kind).catch(() => { });
+    const clearTimer = useCallback(() => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
         }
-    }, [clearTimers, saveKind]);
+    }, []);
+
+    const saveNow = useCallback(async () => {
+        const cid = chapterIdRef.current;
+        if (!cid) return;
+        await saveChapterOutline(cid, {
+            rough: roughRef.current || '',
+            detailed: detailedRef.current || '',
+        });
+        dirtyRef.current = false;
+    }, []);
+
+    const scheduleSave = useCallback((delayMs = 800) => {
+        dirtyRef.current = true;
+        clearTimer();
+        timerRef.current = setTimeout(() => {
+            saveNow().catch(() => { });
+        }, delayMs);
+    }, [clearTimer, saveNow]);
+
+    const flushPendingSave = useCallback(() => {
+        clearTimer();
+        if (dirtyRef.current) {
+            // Fire-and-forget (do not block UI interactions).
+            saveNow().catch(() => { });
+        }
+    }, [clearTimer, saveNow]);
 
     const onClose = useCallback(() => {
-        flushPendingSaves();
+        flushPendingSave();
         setShowOutline(false);
-    }, [flushPendingSaves, setShowOutline]);
+    }, [flushPendingSave, setShowOutline]);
 
     const handleSaveAll = useCallback(async () => {
         setSaving(true);
         try {
-            clearTimers();
-            await Promise.all([
-                saveKind(OUTLINE_KINDS.rough),
-                saveKind(OUTLINE_KINDS.detailed),
-            ]);
+            clearTimer();
+            await saveNow();
             showToast(t('outline.saved'), 'success');
-        } catch (e) {
+        } catch {
             showToast(t('outline.saveFailed'), 'error');
         } finally {
             setSaving(false);
         }
-    }, [clearTimers, saveKind, showToast, t]);
+    }, [clearTimer, saveNow, showToast, t]);
 
+    const switchChapter = useCallback((nextId) => {
+        flushPendingSave();
+        setSelectedChapterId(nextId || null);
+    }, [flushPendingSave]);
+
+    const onPrev = useCallback(() => {
+        if (!chapters || chapters.length === 0) return;
+        const idx = selectedIndex >= 0 ? selectedIndex : 0;
+        const prev = chapters[idx - 1];
+        if (prev?.id) switchChapter(prev.id);
+    }, [chapters, selectedIndex, switchChapter]);
+
+    const onNext = useCallback(() => {
+        if (!chapters || chapters.length === 0) return;
+        const idx = selectedIndex >= 0 ? selectedIndex : 0;
+        const next = chapters[idx + 1];
+        if (next?.id) switchChapter(next.id);
+    }, [chapters, selectedIndex, switchChapter]);
+
+    // When opened, default to the current active chapter.
+    useEffect(() => {
+        if (!open) return;
+        setSelectedChapterId(activeChapterId || null);
+    }, [open, activeChapterId]);
+
+    // Load outline when the selected chapter changes.
     useEffect(() => {
         if (!open) return;
 
         let cancelled = false;
+        clearTimer();
+        dirtyRef.current = false;
+
+        const cid = selectedId;
+        chapterIdRef.current = cid;
+        setRough('');
+        setDetailed('');
+        roughRef.current = '';
+        detailedRef.current = '';
+
+        if (!cid) return;
+
         const load = async () => {
             setLoading(true);
             try {
-                clearTimers();
-                dirtyKindsRef.current.clear();
-
-                const nodes = await getSettingsNodes();
-
-                // Ensure we have an active work.
-                let workId = getActiveWorkId();
-                if (!workId || !nodes.some(n => n.id === workId && n.type === 'work')) {
-                    const firstWork = nodes.find(n => n.type === 'work');
-                    workId = firstWork?.id || 'work-default';
-                    if (workId) setActiveWorkId(workId);
-                }
-
-                const plotFolderId = `${workId}-plot`;
-
-                const findOutlineNode = (kind) => nodes.find(n =>
-                    n.parentId === plotFolderId &&
-                    n.type === 'item' &&
-                    n.category === 'plot' &&
-                    n.content?.outlineKind === kind
-                );
-
-                let roughNode = findOutlineNode(OUTLINE_KINDS.rough);
-                let detailedNode = findOutlineNode(OUTLINE_KINDS.detailed);
-
-                if (!roughNode) {
-                    roughNode = await addSettingsNode({
-                        name: t('outline.roughLabel'),
-                        type: 'item',
-                        category: 'plot',
-                        parentId: plotFolderId,
-                        icon: '📄',
-                        content: { outlineKind: OUTLINE_KINDS.rough, description: '' },
-                    });
-                }
-
-                if (!detailedNode) {
-                    detailedNode = await addSettingsNode({
-                        name: t('outline.detailedLabel'),
-                        type: 'item',
-                        category: 'plot',
-                        parentId: plotFolderId,
-                        icon: '📄',
-                        content: { outlineKind: OUTLINE_KINDS.detailed, description: '' },
-                    });
-                }
-
+                const data = await loadChapterOutline(cid);
                 if (cancelled) return;
-
-                roughNodeIdRef.current = roughNode?.id || null;
-                detailedNodeIdRef.current = detailedNode?.id || null;
-
-                const roughText = roughNode?.content?.description || '';
-                const detailedText = detailedNode?.content?.description || '';
-
-                roughTextRef.current = roughText;
-                detailedTextRef.current = detailedText;
-                setRough(roughText);
-                setDetailed(detailedText);
-            } catch (e) {
-                console.error('Failed to load outline:', e);
+                const r = data?.rough || '';
+                const d = data?.detailed || '';
+                setRough(r);
+                setDetailed(d);
+                roughRef.current = r;
+                detailedRef.current = d;
+            } catch {
+                if (!cancelled) showToast(t('outline.loadFailed'), 'error');
             } finally {
                 if (!cancelled) setLoading(false);
             }
         };
 
         load();
-        return () => {
-            cancelled = true;
-        };
-    }, [open, clearTimers, t]);
+        return () => { cancelled = true; };
+    }, [open, selectedId, clearTimer, showToast, t]);
 
     if (!open) return null;
 
     return (
-        <div className="settings-panel-overlay" onClick={onClose} style={{ zIndex: 9998 }}>
-            <div
-                className="settings-panel-container"
-                onClick={e => e.stopPropagation()}
-                style={{ width: 900, maxWidth: '95vw', height: '85vh' }}
-            >
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1000 }}>
+            <div className="outline-panel-modal" onClick={e => e.stopPropagation()}>
                 <div className="settings-header">
-                    <h2>
+                    <h2 style={{ minWidth: 0 }}>
                         📋 {t('outline.title')}
                         <span className="subtitle">— {t('outline.subtitle')}</span>
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <button
+                            className="btn-mini-icon"
+                            onClick={onPrev}
+                            disabled={loading || saving || selectedIndex <= 0}
+                            title={t('outline.prevChapter')}
+                        >◀</button>
+                        <select
+                            className="outline-chapter-select"
+                            value={selectedId || ''}
+                            onChange={(e) => switchChapter(e.target.value)}
+                            disabled={loading || saving || !(chapters?.length > 0)}
+                            title={t('outline.chapterSelect')}
+                        >
+                            {(chapters || []).map((ch, idx) => (
+                                <option key={ch.id} value={ch.id}>
+                                    {t('outline.chapterLabel')
+                                        .replace('{num}', String(idx + 1))
+                                        .replace('{title}', ch.title || t('outline.untitled'))}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            className="btn-mini-icon"
+                            onClick={onNext}
+                            disabled={loading || saving || selectedIndex < 0 || selectedIndex >= (chapters?.length || 0) - 1}
+                            title={t('outline.nextChapter')}
+                        >▶</button>
+
+                        <button
                             className="btn btn-primary btn-sm"
                             style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}
                             onClick={handleSaveAll}
-                            disabled={loading || saving}
+                            disabled={loading || saving || !selectedId}
                             title={t('outline.saveTip')}
                         >
                             {saving ? t('outline.saving') : t('outline.saveBtn')}
@@ -197,7 +202,11 @@ export default function OutlinePanel() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, overflow: 'auto', padding: '18px 24px', background: 'var(--bg-primary)' }}>
-                    {loading ? (
+                    {!selectedId ? (
+                        <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+                            {t('outline.noChapter')}
+                        </div>
+                    ) : loading ? (
                         <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
                             {t('outline.loading')}
                         </div>
@@ -205,8 +214,9 @@ export default function OutlinePanel() {
                         <>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', minWidth: 0 }}>
                                         {t('outline.roughLabel')}
+                                        {selectedChapter?.title ? <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> — {selectedChapter.title}</span> : null}
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                                         {t('outline.autoSaveHint')}
@@ -220,8 +230,8 @@ export default function OutlinePanel() {
                                     onChange={(e) => {
                                         const v = e.target.value;
                                         setRough(v);
-                                        roughTextRef.current = v;
-                                        scheduleSave(OUTLINE_KINDS.rough);
+                                        roughRef.current = v;
+                                        scheduleSave();
                                     }}
                                     disabled={saving}
                                 />
@@ -239,8 +249,8 @@ export default function OutlinePanel() {
                                     onChange={(e) => {
                                         const v = e.target.value;
                                         setDetailed(v);
-                                        detailedTextRef.current = v;
-                                        scheduleSave(OUTLINE_KINDS.detailed);
+                                        detailedRef.current = v;
+                                        scheduleSave();
                                     }}
                                     disabled={saving}
                                 />
@@ -252,3 +262,4 @@ export default function OutlinePanel() {
         </div>
     );
 }
+
