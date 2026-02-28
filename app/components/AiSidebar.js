@@ -3,6 +3,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { INPUT_TOKEN_BUDGET, buildContext, compileSystemPrompt } from '../lib/context-engine';
 import {
+    applyAceDeltaOperations,
+    getAceSystemPromptAddon,
+    loadAcePlaybook,
+    renderAcePlaybookForCurator,
+    saveAcePlaybook,
+} from '../lib/ace-playbook';
+import {
     saveSessionStore, createSession, deleteSession as deleteSessionFn,
     renameSession, switchSession, getActiveSession, addMessage, editMessage as editMsgFn,
     deleteMessage as deleteMsgFn, createBranch, addVariant, switchVariant, replaceMessages
@@ -40,6 +47,18 @@ function getPlainTextFromMessageContent(content) {
     return parts.filter(p => typeof p === 'string').join('').trim();
 }
 
+function parseJsonFromModel(text) {
+    if (!text) return null;
+    const trimmed = String(text).trim();
+    try { return JSON.parse(trimmed); } catch { /* ignore */ }
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+        try { return JSON.parse(trimmed.slice(start, end + 1)); } catch { /* ignore */ }
+    }
+    return null;
+}
+
 // Removed static label maps in favor of i18n
 
 // ==================== AI 对话侧栏 ====================
@@ -54,6 +73,18 @@ export default function AiSidebar({ onInsertText }) {
         showToast
     } = useAppStore();
     const { t } = useI18n();
+
+    // ACE context engineering toggle (stored locally)
+    const [aceEnabled, setAceEnabled] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return localStorage.getItem('author-ace-enabled') === '1';
+    });
+    useEffect(() => {
+        try {
+            localStorage.setItem('author-ace-enabled', aceEnabled ? '1' : '0');
+        } catch { /* ignore */ }
+    }, [aceEnabled]);
+    const aceUpdateChainRef = useRef(Promise.resolve());
 
     // Streaming abort controller (Stop button)
     const streamAbortRef = useRef(null);
@@ -77,6 +108,14 @@ export default function AiSidebar({ onInsertText }) {
 
     const onClose = useCallback(() => { stopStreaming(); setAiSidebarOpen(false); }, [stopStreaming, setAiSidebarOpen]);
     const onOpenSettings = useCallback(() => { stopStreaming(); setAiSidebarOpen(false); setShowSettings(true); }, [stopStreaming, setAiSidebarOpen, setShowSettings]);
+
+    const toggleAce = useCallback(() => {
+        setAceEnabled(prev => {
+            const next = !prev;
+            showToast(next ? t('aiSidebar.aceOnToast') : t('aiSidebar.aceOffToast'), 'info');
+            return next;
+        });
+    }, [showToast, t]);
 
     // 派生状态
     const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
@@ -173,7 +212,7 @@ export default function AiSidebar({ onInsertText }) {
     }, [slidingWindow, slidingWindowSize, chatHistory.length]);
 
     // --- 通用 SSE 流式读取，支持 text+thinking ---
-    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal) => {
+    const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal, maxTokens = 2000) => {
         const decoder = new TextDecoder();
         let buffer = '';
         let fullText = '';
@@ -183,7 +222,7 @@ export default function AiSidebar({ onInsertText }) {
             const res = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens: 2000 }),
+                body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens }),
                 signal,
             });
 
@@ -236,13 +275,33 @@ export default function AiSidebar({ onInsertText }) {
         setSessionStore(prev => addMessage(prev, userMsg));
         setChatStreaming(true);
         const aiMsgId = `msg-${Date.now()}-a`;
+        let finalAssistantText = '';
 
         try {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
-            const systemPrompt = compileSystemPrompt(context, 'chat');
+            let systemPrompt = compileSystemPrompt(context, 'chat');
+
+            // ACE: inject relevant bullets right before "你的任务" to keep them salient.
+            if (aceEnabled) {
+                try {
+                    const workId = getActiveWorkId() || 'work-default';
+                    const addon = await getAceSystemPromptAddon(workId, text, apiConfig, { topK: 12, maxTokens: 1200 });
+                    if (addon?.text) {
+                        const sep = '\n\n---\n\n';
+                        const parts = systemPrompt.split(sep);
+                        const aceSection = `【ACE Playbook（对话记忆，仅供参考）】\n${addon.text}`;
+                        if (parts.length >= 2) parts.splice(parts.length - 1, 0, aceSection);
+                        else parts.push(aceSection);
+                        systemPrompt = parts.join(sep);
+                    }
+                } catch (e) {
+                    console.warn('ACE add-on failed:', e?.message || e);
+                }
+            }
+
             const historyForApi = selectedHistory.map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
             const userPrompt = historyForApi ? `${historyForApi}\n${t('aiSidebar.roleYou')}: ${text}` : text;
 
@@ -264,6 +323,7 @@ export default function AiSidebar({ onInsertText }) {
                     }));
                 },
                 (finalText, finalThinking) => {
+                    finalAssistantText = finalText || '';
                     setSessionStore(prev => {
                         const finalStore = {
                             ...prev, sessions: prev.sessions.map(s => {
@@ -279,6 +339,76 @@ export default function AiSidebar({ onInsertText }) {
                     });
                 }
             , controller.signal);
+
+            // ACE: background curation (incremental delta updates) after a successful turn.
+            if (aceEnabled && finalAssistantText && !controller.signal.aborted) {
+                const workId = getActiveWorkId() || 'work-default';
+                const userText = text;
+                const assistantText = finalAssistantText;
+
+                aceUpdateChainRef.current = aceUpdateChainRef.current.then(async () => {
+                    try {
+                        const pb = await loadAcePlaybook(workId);
+                        const currentPlaybook = renderAcePlaybookForCurator(pb, 2600);
+
+                        const curatorSystem = [
+                            '你是 ACE (Agentic Context Engineering) 框架中的 Curator。',
+                            '目标：把这次对话里“未来仍然有用且稳定”的信息，增量写入 playbook，避免上下文坍塌与过度摘要。',
+                            '规则：',
+                            '- 只输出严格 JSON（不要 markdown/代码块）。',
+                            '- 只允许输出 operations 的增量更新，不要重写整个 playbook。',
+                            '- operations 仅使用 type=ADD。',
+                            '- 只记录用户明确表达的、可长期复用的偏好/约束/事实/工作流/未决事项；不要记录一次性临时指令。',
+                            '- 不要记录任何密钥、token、个人隐私或可识别信息。',
+                            '- 避免冗余：如果 playbook 已包含同样信息，就不要再添加。',
+                            '- 每次最多输出 5 条 ADD。',
+                            '可用 section: preferences, project, workflow, open_threads, misc',
+                        ].join('\n');
+
+                        const curatorUser = [
+                            '【当前 Playbook】',
+                            currentPlaybook || '(empty)',
+                            '',
+                            '【本次对话】',
+                            `用户：${String(userText || '').slice(0, 3000)}`,
+                            `助手：${String(assistantText || '').slice(0, 3000)}`,
+                            '',
+                            '请输出 JSON：',
+                            '{',
+                            '  "reasoning": "...",',
+                            '  "operations": [',
+                            '    {"type":"ADD","section":"preferences|project|workflow|open_threads|misc","content":"..."}',
+                            '  ]',
+                            '}',
+                        ].join('\n');
+
+                        let curatorOut = '';
+                        await streamResponse(
+                            apiEndpoint,
+                            curatorSystem,
+                            curatorUser,
+                            apiConfig,
+                            () => { },
+                            (finalText) => { curatorOut = finalText || ''; },
+                            undefined,
+                            900,
+                        );
+
+                        const delta = parseJsonFromModel(curatorOut);
+                        const ops = delta?.operations;
+                        if (!Array.isArray(ops) || ops.length === 0) return;
+
+                        const { playbook: nextPb, added, merged } = await applyAceDeltaOperations(pb, ops, apiConfig);
+                        if (added > 0 || merged > 0) {
+                            await saveAcePlaybook(workId, nextPb);
+                            // Keep it quiet by default; toast only on failures.
+                        }
+                    } catch (e) {
+                        console.warn('ACE curation failed:', e?.message || e);
+                        showToast(t('aiSidebar.aceUpdateFailed'), 'error');
+                    }
+                });
+            }
         } catch (err) {
             const errorMsg = { id: `msg-${Date.now()}-e`, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
             setSessionStore(prev => addMessage(prev, errorMsg));
@@ -286,7 +416,7 @@ export default function AiSidebar({ onInsertText }) {
             setChatStreaming(false);
             streamAbortRef.current = null;
         }
-    }, [activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming, t]);
+    }, [activeChapterId, contextSelection, aceEnabled, streamResponse, setSessionStore, setChatStreaming, showToast, t]);
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
@@ -312,7 +442,24 @@ export default function AiSidebar({ onInsertText }) {
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
-            const systemPrompt = compileSystemPrompt(context, 'chat');
+            let systemPrompt = compileSystemPrompt(context, 'chat');
+
+            if (aceEnabled) {
+                try {
+                    const workId = getActiveWorkId() || 'work-default';
+                    const addon = await getAceSystemPromptAddon(workId, userMsg.content, apiConfig, { topK: 12, maxTokens: 1200 });
+                    if (addon?.text) {
+                        const sep = '\n\n---\n\n';
+                        const parts = systemPrompt.split(sep);
+                        const aceSection = `【ACE Playbook（对话记忆，仅供参考）】\n${addon.text}`;
+                        if (parts.length >= 2) parts.splice(parts.length - 1, 0, aceSection);
+                        else parts.push(aceSection);
+                        systemPrompt = parts.join(sep);
+                    }
+                } catch (e) {
+                    console.warn('ACE add-on failed:', e?.message || e);
+                }
+            }
             const historyForApi = priorHistory
                 .filter(m => m.role === 'user' || m.role === 'assistant')
                 .map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
@@ -367,7 +514,7 @@ export default function AiSidebar({ onInsertText }) {
             setChatStreaming(false);
             streamAbortRef.current = null;
         }
-    }, [chatHistory, chatStreaming, activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
+    }, [chatHistory, chatStreaming, activeChapterId, contextSelection, aceEnabled, streamResponse, setSessionStore, setChatStreaming, t]);
 
     const onApplySettingsAction = useCallback(async (action, actionKey) => {
         try {
@@ -758,6 +905,13 @@ export default function AiSidebar({ onInsertText }) {
                                 title={t('aiSidebar.summarizeTitle')}
                             >
                                 {t('aiSidebar.summarize')}
+                            </button>
+                            <button
+                                className={`btn-mini ${aceEnabled ? 'primary' : ''}`}
+                                onClick={toggleAce}
+                                title={aceEnabled ? t('aiSidebar.aceOnTitle') : t('aiSidebar.aceOffTitle')}
+                            >
+                                {t('aiSidebar.ace')}
                             </button>
                             <button className="btn-mini danger" onClick={handleClearChat} title={t('aiSidebar.clearChatTitle')}>
                                 {t('aiSidebar.clearChat')}
