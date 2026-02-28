@@ -156,6 +156,12 @@ export async function saveAcePlaybook(workId, playbook) {
     } catch { /* ignore */ }
 }
 
+export async function resetAcePlaybook(workId) {
+    const pb = makeEmptyPlaybook(workId);
+    await saveAcePlaybook(workId, pb);
+    return pb;
+}
+
 export function renderAcePlaybookForCurator(playbook, maxTokens = 2500) {
     if (!playbook) return '';
     ensureSections(playbook);
@@ -183,6 +189,54 @@ export function renderAcePlaybookForCurator(playbook, maxTokens = 2500) {
             lines.push(line);
             used += t;
         }
+        lines.push('');
+        used += 1;
+        if (used > maxTokens) break;
+    }
+
+    return lines.join('\n').trim();
+}
+
+export function renderAcePlaybookAsText(playbook, maxTokens = 12000) {
+    if (!playbook) return '';
+    ensureSections(playbook);
+
+    const lines = [];
+    lines.push('# ACE Playbook');
+    lines.push(`work_id: ${playbook.workId || 'work-default'}`);
+    lines.push(`updated_at: ${playbook.updatedAt || ''}`);
+    lines.push('');
+
+    let used = estimateTokens(lines.join('\n'));
+
+    for (const s of DEFAULT_SECTIONS) {
+        const sec = playbook.sections[s.key];
+        if (!sec) continue;
+
+        const header = `## ${sec.title}`;
+        const ht = estimateTokens(header + '\n');
+        if (used + ht > maxTokens) break;
+        lines.push(header);
+        used += ht;
+
+        const bullets = Array.isArray(sec.bullets) ? sec.bullets : [];
+        if (bullets.length === 0) {
+            const emptyLine = '(empty)';
+            const et = estimateTokens(emptyLine + '\n');
+            if (used + et <= maxTokens) {
+                lines.push(emptyLine);
+                used += et;
+            }
+        } else {
+            for (const b of bullets) {
+                const line = `[${b.id}] helpful=${b.helpful || 0} harmful=${b.harmful || 0} :: ${b.content || ''}`;
+                const t = estimateTokens(line + '\n');
+                if (used + t > maxTokens) break;
+                lines.push(line);
+                used += t;
+            }
+        }
+
         lines.push('');
         used += 1;
         if (used > maxTokens) break;
@@ -361,4 +415,3 @@ export async function getAceSystemPromptAddon(workId, query, apiConfig, opts = {
     const text = renderAceBulletsForInjection(bullets, maxTokens);
     return { text, bullets };
 }
-
